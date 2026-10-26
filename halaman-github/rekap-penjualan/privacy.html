@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kebijakan Privasi — Rekap Penjualan</title>
+<style>
+:root{--navy:#1f3a5f;--text:#1d2939;--mute:#667085;--line:#dfe3ea}
+*{box-sizing:border-box}body{margin:0;font:16px/1.65 "Segoe UI",system-ui,-apple-system,sans-serif;color:var(--text);background:#fff}
+.wrap{max-width:780px;margin:0 auto;padding:40px 20px 56px}
+h1{font-size:30px;color:var(--navy);margin:0 0 4px}h2{font-size:19px;color:var(--navy);margin:30px 0 6px}
+.mute{color:var(--mute);font-size:14px}a{color:#175cd3}hr{border:0;border-top:1px solid var(--line);margin:36px 0}
+li{margin-bottom:6px}
+</style>
+</head>
+<body><div class="wrap">
+<p><a href="./">← Rekap Penjualan</a></p>
+<h1>Kebijakan Privasi</h1>
+<p class="mute">Aplikasi: Rekap Penjualan · Pengembang: Fizard Studio · Berlaku sejak 26 Oktober 2026</p>
+
+<h2>1. Ringkasan</h2>
+<p>Rekap Penjualan adalah aplikasi desktop yang berjalan di komputer pengguna untuk mencatat dan merekap transaksi penjualan. Seluruh data transaksi disimpan di komputer pengguna (folder <code>data</code> di samping aplikasi). Pengembang <b>tidak</b> mengoperasikan server dan <b>tidak</b> menerima, menyimpan, atau melihat data pengguna.</p>
+
+<h2>2. Data Google yang diakses</h2>
+<p>Fitur backup ke Google Drive bersifat opsional dan hanya aktif bila pengguna menekan “Hubungkan Google Drive” dan memberikan izin. Aplikasi meminta izin berikut:</p>
+<ul>
+  <li><code>https://www.googleapis.com/auth/drive.file</code> — membuat folder “Backup Rekap Penjualan” serta membuat, memperbarui, dan menghapus file backup yang <b>dibuat oleh aplikasi ini sendiri</b>. Aplikasi tidak dapat melihat atau mengubah file lain di Google Drive pengguna.</li>
+  <li><code>openid</code> dan <code>email</code> — hanya untuk menampilkan alamat email akun yang terhubung di dalam aplikasi.</li>
+</ul>
+
+<h2>3. Cara data digunakan</h2>
+<ul>
+  <li>File backup (berisi data transaksi dan lampiran milik pengguna) dikirim langsung dari komputer pengguna ke Google Drive pengguna.</li>
+  <li>Token akses Google disimpan hanya di komputer pengguna (file <code>data/gdrive.json</code>) dan tidak disertakan di dalam file backup.</li>
+  <li>Data tidak dijual, tidak dibagikan kepada pihak ketiga, dan tidak dipakai untuk iklan atau melatih model AI.</li>
+</ul>
+<p>Penggunaan informasi yang diterima dari Google API mematuhi <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, termasuk persyaratan Limited Use.</p>
+
+<h2>4. Menghapus akses dan data</h2>
+<ul>
+  <li>Di aplikasi: Pengaturan → Backup Google Drive → <b>Putuskan</b>. Token dihapus dari komputer dan akses dicabut.</li>
+  <li>Di akun Google: <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a> → pilih Rekap Penjualan → hapus akses.</li>
+  <li>File backup dapat dihapus kapan saja dari folder “Backup Rekap Penjualan” di Google Drive.</li>
+</ul>
+
+<h2>5. Kontak</h2>
+<p>Pertanyaan tentang kebijakan ini: <a href="mailto:firmanmochamad09@gmail.com">firmanmochamad09@gmail.com</a></p>
+
+<hr>
+<h1 style="font-size:24px">Privacy Policy (English)</h1>
+<p><b>Rekap Penjualan</b> is a desktop application that runs on the user's own computer. All business data is stored locally. The developer (Fizard Studio) operates no server and never receives user data.</p>
+<p>The optional Google Drive backup requests <code>drive.file</code> (create and manage only the backup files and folder created by this app), plus <code>openid</code> and <code>email</code> (to display the connected account). Backups are uploaded directly from the user's computer to the user's own Google Drive. OAuth tokens stay on the user's computer and are excluded from backups. Data is not sold, shared with third parties, used for advertising, or used to train AI models. Use of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+<p>Users can disconnect in the app (Settings → Google Drive backup → Disconnect) or revoke access at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>. Contact: <a href="mailto:firmanmochamad09@gmail.com">firmanmochamad09@gmail.com</a></p>
+</div></body>
+</html>

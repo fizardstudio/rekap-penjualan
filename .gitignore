@@ -1,0 +1,8 @@
+# hasil build & data pemakai
+*.exe
+data/
+dist/
+# bahan Excel/PDF asli pelanggan (tidak masuk repo)
+Bahan/
+__pycache__/
+node_modules/
