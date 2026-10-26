@@ -65,12 +65,12 @@ function gdChip() {
     tombol = dicabut ? (admin ? `<a class="btn sm" href="#/pengaturan">Hubungkan ulang</a>` : "") : `<button class="sm" data-gdbak>Coba lagi</button>`;
   } else if (g.pending) {
     cls = "warn"; ikon = GICON; teks = "Ada perubahan belum di-backup";
-    sub = (g.lastOK ? "terakhir " + waktuRelatif(g.lastOK) + " · " : "") + esc(g.email || "");
-    tombol = `<button class="sm" data-gdbak>↻ Backup sekarang</button>`;
+    sub = (g.jeda === "manual" ? "mode manual · " : "") + (g.lastOK ? "terakhir " + waktuRelatif(g.lastOK) + " · " : "") + esc(g.email || "");
+    tombol = `<button class="sm" data-gdbak>↻<span class="gd-bl"> Backup sekarang</span></button>`;
   } else {
     cls = "ok"; ikon = GICON; teks = g.lastOK ? "Ter-backup " + waktuRelatif(g.lastOK) : "Terhubung";
     sub = esc(g.email || "");
-    tombol = `<button class="sm ghost" data-gdbak title="Kirim backup sekarang">↻ Backup sekarang</button>`;
+    tombol = `<button class="sm ghost" data-gdbak title="Kirim backup sekarang">↻<span class="gd-bl"> Backup sekarang</span></button>`;
   }
   el.className = "gdchip " + cls;
   el.innerHTML = `<span class="gd-i">${ikon}</span><span class="gd-t"><b>${teks}</b><small>${sub}</small></span>${tombol}`;
@@ -151,6 +151,8 @@ function gdPengaturan(el) {
   const g = S.gd, admin = S.data.me.role === "admin";
   if (!g) { el.innerHTML = ""; return; }
   const lokal = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  const jd = g.jeda || "cepat", jdTeks = { cepat: "sekitar 20 detik setelah ada perubahan", normal: "sekitar 2–3 menit setelah ada perubahan", hemat: "paling sering tiap 30 menit", harian: "sekali sehari", manual: "hanya saat tombol Backup sekarang ditekan" }[jd];
+  const pilihJeda = admin ? `<label class="f" style="max-width:520px;margin-top:10px"><span>Jeda backup otomatis</span><select id="gdJeda">${[["cepat", "Cepat: ±20 detik setelah ada perubahan (disarankan)"], ["normal", "Normal: ±2–3 menit setelah ada perubahan"], ["hemat", "Hemat kuota internet: paling sering tiap 30 menit"], ["harian", "Sekali sehari"], ["manual", "Manual: hanya saat tombol Backup sekarang ditekan"]].map(o => `<option value="${o[0]}" ${o[0] === jd ? "selected" : ""}>${o[1]}</option>`).join("")}</select><span class="small mute">Pilih Manual atau Sekali sehari bila komputer jarang tersambung internet.</span></label>` : "";
   const status = !g.terhubung
     ? `<div class="gd-st off">${GICON}<div><b>Belum terhubung</b><div class="small mute">${g.siap ? "Klik \"Hubungkan Google Drive\" lalu login dengan akun Google yang akan menyimpan backup." : "Isi Client ID & Client Secret dulu (langkah 1)."}</div></div></div>`
     : `<div class="gd-st ${g.lastError ? "err" : "ok"}">${GICON}<div><b>Terhubung: ${esc(g.email || "akun Google")}</b>
@@ -159,8 +161,9 @@ function gdPengaturan(el) {
         ${g.lastError ? `<div class="small" style="color:var(--red);margin-top:4px">⚠ ${esc(g.lastError)}</div>` : ""}</div></div>`;
   el.innerHTML = `<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Backup Google Drive</h2>
       <div class="row">${g.terhubung && admin ? `<button id="gdHist">Riwayat &amp; pulihkan</button>` : ""}${g.terhubung && !g.konflik ? `<button class="pri" id="gdNow" ${g.running ? "disabled" : ""}>${g.running ? "Mengirim…" : "↻ Backup sekarang"}</button>` : ""}</div></div>
-    <p class="small mute" style="margin:6px 0 12px">Backup dikirim <b>otomatis</b> beberapa menit setelah ada perubahan data (dan dicoba ulang bila internet putus). Satu file zip per hari (data + lampiran), 30 hari terakhir disimpan. Aplikasi hanya bisa mengakses file yang dibuatnya sendiri di Drive. Login Google tidak ikut di dalam file backup.</p>
+    <p class="small mute" style="margin:6px 0 12px">Backup dikirim ke Google Drive <b>${jdTeks}</b>${jd === "manual" ? "" : " (dan dicoba ulang bila internet putus)"}. Satu file zip per hari (data + lampiran), 30 hari terakhir disimpan. Aplikasi hanya bisa mengakses file yang dibuatnya sendiri di Drive. Login Google tidak ikut di dalam file backup.</p>
     ${status}
+    ${pilihJeda}
     ${g.konflik ? `<div class="alert err" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><span><b>Backup ditahan.</b> ${g.konflik.awal ? "Ditemukan backup di Drive" : g.konflik.alasan === "data-lain" ? "Backup terakhir di Drive berasal dari komputer lain" : "Data di Drive lebih baru"} (${esc(g.konflik.pc || "-")}, ${tglJam(g.konflik.diubah)}, ${g.konflik.trx} transaksi).</span>${admin ? `<button class="pri sm" id="gdKonfBtn">Tinjau</button>` : ""}</div>` : ""}
     ${admin ? `
     <div class="gd-steps">
@@ -180,6 +183,7 @@ function gdPengaturan(el) {
   const now = $("#gdNow", el); if (now) now.onclick = () => gdBackupSekarang(now);
   const hist = $("#gdHist", el); if (hist) hist.onclick = gdRiwayat;
   const kb = $("#gdKonfBtn", el); if (kb) kb.onclick = gdKonflik;
+  const jsel = $("#gdJeda", el); if (jsel) jsel.onchange = async () => { try { S.gd = await api("/api/gdrive/jeda", { jeda: jsel.value }); toast("Jeda backup disimpan"); gdRefresh(); } catch (e) { toast(e.message, true); } };
   if (!admin) return;
   $("#gdHelp", el).onclick = e => { e.preventDefault(); gdPanduan(); };
   $("#gdSaveCfg", el).onclick = async () => {

@@ -286,3 +286,26 @@ table.konf thead th{background:#f7f8fa}table.konf tbody th{color:var(--mute);fon
 table.konf td.lebih{font-weight:700;color:#6941c6}
 .konf-pilih{display:grid;grid-template-columns:1fr 1fr;gap:12px}.konf-pilih>div{border:1px solid var(--line);border-radius:8px;padding:10px 12px}
 @media (max-width:640px){.konf-pilih{grid-template-columns:1fr}}
+
+/* logo kanal & CV */
+.klogo{width:16px;height:16px;border-radius:4px;object-fit:contain;vertical-align:-3px;flex-shrink:0}
+.klogo.cvl{background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.08)}
+.kl-x{display:inline-flex;align-items:center;justify-content:center;background:#eef1f5;color:#475467;font-size:10px;font-weight:800}
+.b.bk{display:inline-flex;align-items:center;gap:5px;padding:2px 9px 2px 3px}
+.kp .kp-g{display:flex;flex-wrap:wrap;gap:4px}
+.kp-b{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid var(--line,#d0d5dd);background:#fff;color:inherit;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;line-height:1.2}
+.kp-b .klogo{width:20px;height:20px}
+.kp-b:hover{border-color:#98a2b3}
+.kp-b.on{border-color:#2a78d6;background:#eaf2fd;box-shadow:0 0 0 1px #2a78d6 inset;color:#1849a9}
+.kp-b:focus-visible{outline:2px solid #2a78d6;outline-offset:1px}
+.filters .kp{margin:0}
+.kp{display:block;font-size:12px;font-weight:600;color:#344054;margin-bottom:10px}
+.kp > span{display:block;margin-bottom:4px}
+@media (max-width:600px){
+  .gdchip{min-width:0;flex:1 1 auto;padding-left:10px}
+  .gdchip .gd-t b{overflow:hidden;text-overflow:ellipsis}
+  .gdchip .gd-t small{display:none}
+  .gdchip .gd-bl{display:none}
+}
+@media (max-width:600px){.gd-step>div{min-width:0}.gd-step .grid{grid-template-columns:1fr}.gd-step input{min-width:0;width:100%}}
+@media (max-width:600px){.gd-step label.btn{white-space:normal;text-align:left;height:auto}}

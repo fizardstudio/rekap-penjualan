@@ -27,6 +27,37 @@ const KANAL = {
   MBIZ: { label: "Mbizmarket", incl: false, no: "No. Pesanan (PO)", ph: "PO-190917-260811-1" },
   LAINNYA: { label: "Lainnya / Manual", incl: false, no: "No. Referensi", ph: "TF / via WA / dll" },
 };
+// logo kanal & CV (web/img/*.png) supaya bisa dibedakan sekilas tanpa membaca nama
+const CV_LOGO = { PKM: 1, OSI: 1, DKS: 1 };
+const kanalIkon = (k, cls = "") => KANAL[k] && k !== "LAINNYA" ? `<img class="klogo ${cls}" src="img/kanal-${k}.png" alt="">` : `<span class="klogo kl-x ${cls}">✎</span>`;
+const cvIkon = (k, cls = "") => CV_LOGO[k] ? `<img class="klogo cvl ${cls}" src="img/cv-${k}.png" alt="">` : `<span class="klogo kl-x ${cls}">${esc(String(k || "?").slice(0, 1))}</span>`;
+const kanalBadge = k => `<span class="b ${k} bk">${kanalIkon(k)}${KANAL[k] ? KANAL[k].label : esc(k || "")}</span>`;
+const cvBadge = c => `<span class="b ${c} bk">${cvIkon(c)}${esc(c)}</span>`;
+// pilihan bergambar: tombol logo + select tersembunyi (event change tetap dikirim dari select)
+// items: [[nilai, ikonHTML, teks, judul]]; all = teks tombol "semua" (kosong = tidak ada); kosong = teks option kosong tanpa tombol
+function pilihLogo(selAttr, sel, label, items, all, kosong) {
+  const opts = (all ? `<option value="">${esc(all)}</option>` : kosong ? `<option value="">${esc(kosong)}</option>` : "") + items.map(it => `<option value="${esc(it[0])}" ${it[0] === sel ? "selected" : ""}>${esc(it[2])}</option>`).join("");
+  const btn = (v, isi, judul) => `<button type="button" class="kp-b ${v === sel ? "on" : ""}" data-kv="${esc(v)}" title="${esc(judul)}">${isi}</button>`;
+  return `<div class="f kp"><span>${label}</span><select ${selAttr} hidden>${opts}</select><div class="kp-g">${all ? btn("", esc(all), all) : ""}${items.map(it => btn(it[0], it[1] + `<span>${esc(it[2])}</span>`, it[3] || it[2])).join("")}</div></div>`;
+}
+const kanalPilih = (selAttr, sel, all, label) => pilihLogo(selAttr, sel, label, Object.keys(KANAL).map(k => [k, kanalIkon(k), KANAL[k].label.replace(" / Manual", ""), KANAL[k].label]), all);
+const cvPilih = (selAttr, sel, all, label, kosong) => pilihLogo(selAttr, sel, label, S.data.cv.map(c => [c.kode, cvIkon(c.kode), c.kode, c.nama]), all, kosong);
+document.addEventListener("click", e => {
+  const b = e.target.closest(".kp-b"); if (!b) return;
+  const w = b.closest(".kp"), s = w.querySelector("select");
+  w.querySelectorAll(".kp-b").forEach(x => x.classList.toggle("on", x === b));
+  if (s.value !== b.dataset.kv) { s.value = b.dataset.kv; s.dispatchEvent(new Event("change", { bubbles: true })); }
+});
+// panah kiri/kanan berpindah pilihan (tetap bisa kerja penuh dengan keyboard)
+document.addEventListener("keydown", e => {
+  const b = e.target.closest && e.target.closest(".kp-b"); if (!b || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+  const all = [...b.parentNode.querySelectorAll(".kp-b")], n = all[(all.indexOf(b) + (e.key === "ArrowRight" ? 1 : all.length - 1)) % all.length];
+  e.preventDefault(); n.focus(); n.click();
+});
+document.addEventListener("change", e => {
+  const w = e.target.closest && e.target.closest(".kp"); if (!w || e.target.tagName !== "SELECT") return;
+  w.querySelectorAll(".kp-b").forEach(x => x.classList.toggle("on", x.dataset.kv === e.target.value));
+});
 const STATUS = { proses: "Proses", dikirim: "Dikirim", selesai: "Selesai (BAST)", lunas: "Lunas", batal: "Batal" };
 
 async function api(path, body, opt) {
@@ -460,22 +491,22 @@ function pgBeranda(el) {
   el.innerHTML = `
   <div class="topbar"><div><h1>Ringkasan tabel</h1><div class="mute">Penjualan ke instansi per CV per bulan (nilai termasuk PPN, transaksi batal tidak dihitung)</div></div>
     <div class="filters"><label class="f"><span>Tahun</span><select id="fTahun">${tahunList().map(y => `<option ${y === F.tahun ? "selected" : ""}>${y}</option>`).join("")}</select></label>
-    <label class="f"><span>Kanal</span><select id="fKanal">${optList(kanalOpts(), F.kanal, "Semua kanal")}</select></label>
+    ${kanalPilih('id="fKanal"', F.kanal, "Semua", "Kanal")}
     <button class="pri" onclick="location.hash='#/trx/baru'">+ Transaksi baru</button></div></div>
   ${tanpaTgl ? `<div class="alert warn">${tanpaTgl} transaksi hasil migrasi belum punya tanggal sehingga tidak masuk rekap. <a href="#/transaksi" onclick="S.filters.trx={tahun:'',tanpaTgl:1}">Lengkapi sekarang</a></div>` : ""}
   <div class="kpis">
     <div class="kpi"><div class="l">Total penjualan ${F.tahun}</div><div class="v">Rp ${rpS(tot)}</div><div class="s">${list.length} transaksi</div></div>
-    ${cvs.map(c => `<div class="kpi"><div class="l"><span class="b ${c}">${c}</span> ${esc(cvNama(c).replace(/^CV\.\s*/, ""))}</div><div class="v">Rp ${rpS(m[c].reduce((a, b) => a + b, 0))}</div><div class="s">${list.filter(t => t.cv === c).length} transaksi</div></div>`).join("")}
+    ${cvs.map(c => `<div class="kpi"><div class="l">${cvBadge(c)} ${esc(cvNama(c).replace(/^CV\.\s*/, ""))}</div><div class="v">Rp ${rpS(m[c].reduce((a, b) => a + b, 0))}</div><div class="s">${list.filter(t => t.cv === c).length} transaksi</div></div>`).join("")}
     <div class="kpi"><div class="l">PPh dipotong (22 + 23)</div><div class="v">Rp ${rpS(pph)}</div><div class="s">Belum lunas: ${belumN} trx · Rp ${rpS(belum)}<br><span class="small">(data migrasi tidak dihitung)</span></div></div>
   </div>
   <div class="card tight"><div class="card-h"><h2 style="margin:0">Penjualan per bulan — ${F.tahun}</h2><button class="sm" id="xBeranda">Unduh Excel</button></div>
   <div class="tw"><table class="mx"><thead><tr><th>CV</th>${BLN3.map(b => `<th class="num">${b}</th>`).join("")}<th class="num">Total</th></tr></thead><tbody>
-  ${cvs.map(c => `<tr><td><span class="b ${c}">${c}</span></td>${m[c].map(v => `<td class="num ${v ? "" : "z"}">${v ? rp(v) : "–"}</td>`).join("")}<td class="num"><b>${rp(m[c].reduce((a, b) => a + b, 0))}</b></td></tr>`).join("")}
+  ${cvs.map(c => `<tr><td>${cvBadge(c)}</td>${m[c].map(v => `<td class="num ${v ? "" : "z"}">${v ? rp(v) : "–"}</td>`).join("")}<td class="num"><b>${rp(m[c].reduce((a, b) => a + b, 0))}</b></td></tr>`).join("")}
   <tr class="tot"><td>Total</td>${colTot.map(v => `<td class="num">${v ? rp(v) : "–"}</td>`).join("")}<td class="num">${rp(tot)}</td></tr>
   <tr><td class="sub">Grafik</td>${colTot.map(v => `<td style="vertical-align:bottom"><div class="bar" style="width:100%;height:${Math.round(4 + 46 * v / maxM)}px"></div></td>`).join("")}<td></td></tr>
   </tbody></table></div></div>
   <div class="card tight"><div class="card-h"><h2 style="margin:0">Per kanal</h2></div><div class="tw"><table class="mx"><thead><tr><th>Kanal</th>${cvs.map(c => `<th class="num">${c}</th>`).join("")}<th class="num">Total</th></tr></thead><tbody>
-  ${Object.keys(KANAL).map(k => { const r = perKanal[k] || {}; const s = cvs.reduce((a, c) => a + (r[c] || 0), 0); return `<tr><td><span class="b ${k}">${KANAL[k].label}</span></td>${cvs.map(c => `<td class="num ${r[c] ? "" : "z"}">${r[c] ? rp(r[c]) : "–"}</td>`).join("")}<td class="num"><b>${s ? rp(s) : "–"}</b></td></tr>`; }).join("")}
+  ${Object.keys(KANAL).map(k => { const r = perKanal[k] || {}; const s = cvs.reduce((a, c) => a + (r[c] || 0), 0); return `<tr><td>${kanalBadge(k)}</td>${cvs.map(c => `<td class="num ${r[c] ? "" : "z"}">${r[c] ? rp(r[c]) : "–"}</td>`).join("")}<td class="num"><b>${s ? rp(s) : "–"}</b></td></tr>`; }).join("")}
   </tbody></table></div></div>
   <div class="card tight"><div class="card-h"><h2 style="margin:0">Transaksi terbaru</h2><a href="#/transaksi">Lihat semua →</a></div>${tabelTrx(S.data.transaksi.slice().sort((a, b) => (b.dibuat || "").localeCompare(a.dibuat || "") || b.id - a.id).slice(0, 8))}</div>`;
   $("#fTahun").onchange = e => { F.tahun = e.target.value; render(); };
@@ -487,7 +518,7 @@ function pgBeranda(el) {
 function tabelTrx(list) {
   if (!list.length) return `<p class="mute" style="padding:16px">Belum ada transaksi.</p>`;
   return `<div class="tw"><table><thead><tr><th>Tanggal</th><th>CV</th><th>Kanal</th><th>Satker / instansi</th><th>No. transaksi</th><th class="num">Item</th><th class="num">Total (inc. PPN)</th><th class="num">PPh</th><th>Status</th></tr></thead><tbody>
-  ${list.map(t => { const h = hitung(t); const s = satkerById(t.satkerId); return `<tr class="click" data-id="${t.id}"><td class="nowrap">${t.tanggal ? tgl(t.tanggal) : '<span class="b warn">tanpa tgl</span>'}</td><td><span class="b ${t.cv}">${t.cv}</span></td><td><span class="b ${t.kanal}">${KANAL[t.kanal] ? KANAL[t.kanal].label : t.kanal}</span></td><td>${esc(s.singkat || s.nama)}<div class="sub small mute">${esc(s.nama)}</div></td><td class="small">${esc(t.noTrx || "–")}${t.noSJ ? `<div class="mute">SJ ${esc(t.noSJ)}</div>` : ""}</td><td class="num">${t.items.length}</td><td class="num"><b>${rp(h.total)}</b>${t.noPPN ? '<div><span class="b warn">tanpa PPN</span></div>' : ""}</td><td class="num">${rp(h.pph)}${(t.noPPh22 && h.adaB) || (t.noPPh23 && h.adaJ) ? '<div><span class="b warn">tanpa PPh</span></div>' : ""}</td><td><span class="b ${t.status}">${STATUS[t.status] || t.status}</span></td></tr>`; }).join("")}
+  ${list.map(t => { const h = hitung(t); const s = satkerById(t.satkerId); return `<tr class="click" data-id="${t.id}"><td class="nowrap">${t.tanggal ? tgl(t.tanggal) : '<span class="b warn">tanpa tgl</span>'}</td><td>${cvBadge(t.cv)}</td><td>${kanalBadge(t.kanal)}</td><td>${esc(s.singkat || s.nama)}<div class="sub small mute">${esc(s.nama)}</div></td><td class="small">${esc(t.noTrx || "–")}${t.noSJ ? `<div class="mute">SJ ${esc(t.noSJ)}</div>` : ""}</td><td class="num">${t.items.length}</td><td class="num"><b>${rp(h.total)}</b>${t.noPPN ? '<div><span class="b warn">tanpa PPN</span></div>' : ""}</td><td class="num">${rp(h.pph)}${(t.noPPh22 && h.adaB) || (t.noPPh23 && h.adaJ) ? '<div><span class="b warn">tanpa PPh</span></div>' : ""}</td><td><span class="b ${t.status}">${STATUS[t.status] || t.status}</span></td></tr>`; }).join("")}
   </tbody></table></div>`;
 }
 function bindTrxRows(el) { $$("tr.click[data-id]", el).forEach(tr => tr.onclick = () => location.hash = "#/trx/" + tr.dataset.id); }
@@ -524,8 +555,8 @@ function pgTransaksi(el) {
   <div class="card"><div class="filters">
     <label class="f"><span>Tahun</span><select id="f_tahun"><option value="">Semua</option>${tahunList().map(y => `<option ${y === F.tahun ? "selected" : ""}>${y}</option>`).join("")}</select></label>
     <label class="f"><span>Bulan</span><select id="f_bulan">${optList(Object.fromEntries(BULAN.map((b, i) => [String(i + 1).padStart(2, "0"), b])), F.bulan, "Semua")}</select></label>
-    <label class="f"><span>CV</span><select id="f_cv">${optList(cvOpts(), F.cv, "Semua")}</select></label>
-    <label class="f"><span>Kanal</span><select id="f_kanal">${optList(kanalOpts(), F.kanal, "Semua")}</select></label>
+    ${cvPilih('id="f_cv"', F.cv, "Semua", "CV")}
+    ${kanalPilih('id="f_kanal"', F.kanal, "Semua", "Kanal")}
     <label class="f"><span>Status</span><select id="f_status">${optList(STATUS, F.status, "Semua")}</select></label>
     <label class="f"><span>Satker</span><select id="f_satker" style="max-width:220px">${optList(Object.fromEntries(satkerUsed.map(s => [String(s.id), s.singkat || s.nama])), F.satker, "Semua")}</select></label>
     <label class="f" style="flex:1;min-width:200px"><span>Cari (no. invoice, barang, PPK, SJ…)</span><input id="f_q" value="${esc(F.q || "")}" placeholder="ketik lalu Enter"></label>
@@ -589,8 +620,8 @@ function pgForm(el, arg) {
     <div class="row noprint"><a class="btn" href="#/transaksi">← Kembali</a>${T.id ? `<button id="bPrint">Cetak</button><button id="bCopy">Duplikat</button>${S.data.me.role === "admin" ? `<button class="danger" id="bDel">Hapus</button>` : ""}` : ""}<button class="pri" id="bSave">Simpan</button></div></div>
   ${info ? `<div class="alert ${info.cls}">${info.html}</div>` : ""}
   <div class="card"><div class="grid g4">
-    <label class="f"><span>CV *</span><select data-k="cv"><option value="">— pilih —</option>${S.data.cv.map(c => `<option value="${c.kode}" ${c.kode === T.cv ? "selected" : ""}>${c.kode} — ${esc(c.nama)}</option>`).join("")}</select></label>
-    <label class="f"><span>Kanal *</span><select data-k="kanal">${optList(kanalOpts(), T.kanal)}</select></label>
+    ${cvPilih('data-k="cv"', T.cv, "", "CV *", "— pilih —")}
+    ${kanalPilih('data-k="kanal"', T.kanal, "", "Kanal *")}
     <label class="f span2"><span>Satker / instansi *</span><input id="iSatker" value="${esc(s0 ? s0.nama : (T._satkerNama || ""))}" placeholder="ketik nama atau kode satker…" autocomplete="off"><div class="small mute" id="satInfo">${s0 ? satInfo(s0) : (T._satkerNama ? `<span class="b warn">belum ada di master</span> <a href="#" id="addSat">+ Tambahkan "${esc(T._satkerNama)}"</a>` : "")}</div></label>
     <label class="f"><span>Tanggal transaksi * <span class="mute">(masuk rekap bulan ini)</span></span><input type="date" data-k="tanggal" value="${esc(T.tanggal || "")}"></label>
     <label class="f span2"><span id="lblNo">${KANAL[T.kanal].no}</span><input data-k="noTrx" value="${esc(T.noTrx || "")}" placeholder="${KANAL[T.kanal].ph}"></label>
@@ -875,7 +906,7 @@ function pgForm(el, arg) {
     S.draft = c; S.formDirty = false; location.hash = "#/trx/baru"; render();
   };
   if ($("#bPrint")) $("#bPrint").onclick = () => cetakTrx(T);
-  setTimeout(() => { const c = $("[data-k=cv]"); if (!T.cv && (document.activeElement === document.body || !document.activeElement)) c.focus(); }, 50);
+  setTimeout(() => { const c = $("[data-k=cv]"); if (!T.cv && (document.activeElement === document.body || !document.activeElement)) { const b = c.closest(".kp") ? c.closest(".kp").querySelector(".kp-b") : c; b.focus(); } }, 50);
 }
 
 function bantuanShortcut() {
@@ -1053,8 +1084,8 @@ function pgRekap(el, tab) {
     <label class="f"><span>Tahun</span><select id="r_tahun">${tahunList().map(y => `<option ${y === F.tahun ? "selected" : ""}>${y}</option>`).join("")}</select></label>
     <label class="f"><span>Dari bulan</span><select id="r_dari">${BULAN.map((b, i) => { const v = String(i + 1).padStart(2, "0"); return `<option value="${v}" ${v === F.dari ? "selected" : ""}>${b}</option>`; }).join("")}</select></label>
     <label class="f"><span>Sampai</span><select id="r_sampai">${BULAN.map((b, i) => { const v = String(i + 1).padStart(2, "0"); return `<option value="${v}" ${v === F.sampai ? "selected" : ""}>${b}</option>`; }).join("")}</select></label>
-    ${tab !== "bulanan" ? `<label class="f"><span>CV</span><select id="r_cv">${optList(cvOpts(), F.cv, "Semua CV")}</select></label>` : ""}
-    <label class="f"><span>Kanal</span><select id="r_kanal">${optList(kanalOpts(), F.kanal, "Semua kanal")}</select></label>
+    ${tab !== "bulanan" ? cvPilih('id="r_cv"', F.cv, "Semua", "CV") : ""}
+    ${kanalPilih('id="r_kanal"', F.kanal, "Semua", "Kanal")}
     <span style="flex:1"></span><button class="pri" id="rX">Unduh Excel</button>
   </div></div><div id="rBody"></div>`;
   ["tahun", "dari", "sampai", "cv", "kanal"].forEach(k => { const e = $("#r_" + k); if (e) e.onchange = () => { F[k] = e.value; render(); }; });
@@ -1103,7 +1134,7 @@ function rkBpn(el, list, F) {
   const m = {}; cvs.forEach(c => m[c] = Array(12).fill(0));
   bpnList.forEach(t => { if (m[t.cv]) m[t.cv][+t.tanggal.slice(5, 7) - 1] += hitung(t).total; });
   el.innerHTML = `<div class="card tight"><div class="card-h"><h2 style="margin:0">Penjualan BPN Provinsi Jawa Barat — ${F.tahun}</h2></div><div class="tw"><table class="mx"><thead><tr><th>PT/CV</th>${BLN3.map(b => `<th class="num">${b}</th>`).join("")}<th class="num">Total</th></tr></thead><tbody>
-  ${cvs.map(c => `<tr><td><span class="b ${c}">${c}</span></td>${m[c].map(v => `<td class="num ${v ? "" : "z"}">${v ? rp(v) : "–"}</td>`).join("")}<td class="num"><b>${rp(m[c].reduce((a, b) => a + b, 0))}</b></td></tr>`).join("")}
+  ${cvs.map(c => `<tr><td>${cvBadge(c)}</td>${m[c].map(v => `<td class="num ${v ? "" : "z"}">${v ? rp(v) : "–"}</td>`).join("")}<td class="num"><b>${rp(m[c].reduce((a, b) => a + b, 0))}</b></td></tr>`).join("")}
   <tr class="tot"><td>Total</td>${m[cvs[0]].map((_, i) => `<td class="num">${rp(cvs.reduce((a, c) => a + m[c][i], 0))}</td>`).join("")}<td class="num">${rp(cvs.reduce((a, c) => a + m[c].reduce((x, y) => x + y, 0), 0))}</td></tr></tbody></table></div></div>
   <div class="card tight"><div class="tw"><table class="mx"><thead><tr><th>No</th><th>Kode</th><th>Nama kantah</th>${cvs.map(c => `<th class="num">${c}</th>`).join("")}<th class="num">Transaksi</th><th class="num">Total</th></tr></thead><tbody>
   ${kantah.map((k, i) => { const a = bpnList.filter(t => t.satkerId === k.id); const by = {}; a.forEach(t => by[t.cv] = (by[t.cv] || 0) + hitung(t).total); const s = Object.values(by).reduce((x, y) => x + y, 0);

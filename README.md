@@ -32,6 +32,10 @@ Satu file `.exe`, tampilan di browser, data di `data/data.json` + backup harian 
 Diuji terhadap dokumen asli: INAPROC EP-01M4QP… (PPN 8.057.139, total 81.303.857) dan
 Mbizmarket PO-190917-260811-1 (PPh 22 675.674, penghasilan 43.244.230) — cocok sampai rupiah.
 
+## Pembaruan
+- Jeda backup Google Drive bisa diatur admin (cepat / normal / hemat / harian / manual), field `jeda` di `data/gdrive.json`.
+- Logo kanal (`web/img/kanal-*.png`) dan logo CV (`web/img/cv-*.png`) tampil di pilihan dan badge. Logo CV baru: tambah file `cv-KODE.png` (64x64) dan kodenya di `CV_LOGO` (web/app.js).
+
 ## Catatan repositori
 - Folder `Bahan/` (Excel/PDF asli dari pelanggan) dan `data/` tidak masuk repo. `seed.json` sudah berisi hasil migrasinya.
 - Client ID Google Drive tidak ditanam di exe: diisi lewat menu Pengaturan > Backup Google Drive (tersimpan di `data/gdrive.json`).

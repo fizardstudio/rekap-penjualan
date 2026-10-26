@@ -287,7 +287,7 @@ function pgDashboard(el) {
 
   // 3. perlu ditagih
   const lt = $("#lTagih");
-  lt.innerHTML = tagih.length ? tagih.slice(0, 7).map(t => { const s = satkerById(t.satkerId), u = umur(t); return `<a class="tg" href="#/trx/${t.id}"><span class="b ${t.cv}">${t.cv}</span><span class="tg-n">${esc(s.singkat || s.nama)}<small>${esc(KANAL[t.kanal].label)} · ${esc(t.noTrx || "–")} · ${tgl(t.tanggal)}</small></span><span class="tg-v">Rp ${rp(h(t).total)}<small class="${u > 30 ? "old" : ""}">${u} hari · ${STATUS[t.status]}</small></span></a>`; }).join("") + (tagih.length > 7 ? `<div class="small mute" style="padding:8px 2px">+${tagih.length - 7} transaksi lagi</div>` : "")
+  lt.innerHTML = tagih.length ? tagih.slice(0, 7).map(t => { const s = satkerById(t.satkerId), u = umur(t); return `<a class="tg" href="#/trx/${t.id}">${cvBadge(t.cv)}<span class="tg-n">${esc(s.singkat || s.nama)}<small>${esc(KANAL[t.kanal].label)} · ${esc(t.noTrx || "–")} · ${tgl(t.tanggal)}</small></span><span class="tg-v">Rp ${rp(h(t).total)}<small class="${u > 30 ? "old" : ""}">${u} hari · ${STATUS[t.status]}</small></span></a>`; }).join("") + (tagih.length > 7 ? `<div class="small mute" style="padding:8px 2px">+${tagih.length - 7} transaksi lagi</div>` : "")
     : `<div class="kosong">✓ Tidak ada tagihan tertunda.</div>`;
   const ft = () => { S.filters.trx = { tahun: "", cv: F.cv, kanal: F.kanal }; };
   $("#aTagih").onclick = ft;

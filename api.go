@@ -159,6 +159,7 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/gdrive/backup", a.auth(false, a.gdBackup))
 	mux.HandleFunc("POST /api/gdrive/config", a.auth(true, a.gdConfig))
 	mux.HandleFunc("POST /api/gdrive/disconnect", a.auth(true, a.gdDisconnect))
+	mux.HandleFunc("POST /api/gdrive/jeda", a.auth(true, a.gdJeda))
 	mux.HandleFunc("GET /api/gdrive/login", a.auth(true, a.gdLogin))
 	mux.HandleFunc("GET /oauth/google", a.gdCallback)
 	mux.HandleFunc("POST /api/gdrive/lanjut", a.auth(true, a.gdLanjut))

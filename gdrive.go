@@ -68,6 +68,7 @@ type gdConfig struct {
 	Diterima     string     `json:"diterima,omitempty"`  // "id:rev" backup Drive yang sudah disetujui untuk dilewati
 	LastUp       string     `json:"lastUp,omitempty"`    // "id:rev:diubah" backup terakhir yang DIKIRIM komputer ini
 	InstallID    string     `json:"installId,omitempty"` // kode instalasi (nama file backup per komputer)
+	Jeda         string     `json:"jeda,omitempty"`      // cepat | normal | hemat | harian | manual (kosong = cepat)
 }
 
 // info backup di Drive yang lebih baru / dari komputer lain
@@ -154,6 +155,7 @@ func (g *gDrive) status() map[string]any {
 		"clientId":  g.cfg.ClientID,
 		"folder":    gdFolderName,
 		"konflik":   g.cfg.Konflik,
+		"jeda":      g.cfg.Jeda,
 		"lokal":     g.lokalInfo(),
 	}
 }
@@ -691,36 +693,54 @@ func (g *gDrive) backupInti(alasan string, paksa bool) error {
 	return nil
 }
 
-// loop backup otomatis: bila ada perubahan dan data sudah tenang 2 menit; ulangi tiap 10 menit bila gagal.
+// Pilihan jeda backup otomatis (diatur admin di Pengaturan).
+// tenang = data harus diam selama ini dulu; antara = jarak minimal antar kiriman.
+var gdJedaPilihan = map[string][2]time.Duration{
+	"cepat":  {20 * time.Second, time.Minute},
+	"normal": {2 * time.Minute, 3 * time.Minute},
+	"hemat":  {5 * time.Minute, 30 * time.Minute},
+	"harian": {5 * time.Minute, 23 * time.Hour},
+}
+
+func gdJedaValid(j string) bool { _, ok := gdJedaPilihan[j]; return ok || j == "manual" }
+
+// loop backup otomatis sesuai pilihan jeda; bila gagal (internet putus) dicoba lagi tiap 10 menit.
 func (g *gDrive) loop() {
-	tunggu, tenangMin, jedaOK, jedaGagal, tidur := 20*time.Second, 2*time.Minute, 3*time.Minute, 10*time.Minute, 30*time.Second
-	if os.Getenv("REKAP_G_FAST") != "" { // hanya untuk pengujian
-		tunggu, tenangMin, jedaOK, jedaGagal, tidur = time.Second, 2*time.Second, 3*time.Second, 5*time.Second, time.Second
+	fast := os.Getenv("REKAP_G_FAST") != "" // hanya untuk pengujian
+	if fast {
+		time.Sleep(time.Second)
+	} else {
+		time.Sleep(20 * time.Second)
 	}
-	time.Sleep(tunggu)
 	for {
 		g.mu.Lock()
 		on := g.cfg.RefreshToken != "" && g.cfg.Konflik == nil
+		jedaPilih := g.cfg.Jeda
 		lastTry, _ := time.Parse(time.RFC3339, g.cfg.LastTry)
-		gagal := g.cfg.LastError != ""
-		lastErr := g.cfg.LastError
-		lastHash := g.cfg.LastHash
+		lastErr, lastHash := g.cfg.LastError, g.cfg.LastHash
 		g.mu.Unlock()
-		if on {
+		if jedaPilih == "" {
+			jedaPilih = "cepat"
+		}
+		v, otomatis := gdJedaPilihan[jedaPilih]
+		if on && otomatis {
+			tenangMin, antara := v[0], v[1]
+			if lastErr != "" {
+				antara = 10 * time.Minute
+			}
+			if fast {
+				tenangMin, antara = 2*time.Second, 3*time.Second
+			}
 			p := filepath.Join(g.dataDir, "data.json")
 			fi, err := os.Stat(p)
 			tenang := err == nil && time.Since(fi.ModTime()) > tenangMin
-			jeda := jedaOK
-			if gagal {
-				jeda = jedaGagal
-			}
 			// coba lagi otomatis setelah gagal (kecuali akses dicabut: perlu hubungkan ulang)
-			ulang := gagal && !strings.Contains(lastErr, "Hubungkan ulang")
-			if tenang && time.Since(lastTry) > jeda && (ulang || hashFile(p) != lastHash) {
+			ulang := lastErr != "" && !strings.Contains(lastErr, "Hubungkan ulang")
+			if tenang && time.Since(lastTry) > antara && (ulang || hashFile(p) != lastHash) {
 				_ = g.backup("otomatis")
 			}
 		}
-		time.Sleep(tidur)
+		time.Sleep(5 * time.Second)
 	}
 }
 
@@ -781,6 +801,22 @@ func (a *App) gdDisconnect(w http.ResponseWriter, r *http.Request, u *User) {
 	if rt != "" {
 		go func() { _, _ = g.hc.PostForm(gRevokeURL, url.Values{"token": {rt}}) }()
 	}
+	writeJSON(w, 200, g.status())
+}
+
+func (a *App) gdJeda(w http.ResponseWriter, r *http.Request, u *User) {
+	var in struct {
+		Jeda string `json:"jeda"`
+	}
+	if err := readJSON(r, &in); err != nil || !gdJedaValid(in.Jeda) {
+		fail(w, 400, "Pilihan jeda tidak dikenal.")
+		return
+	}
+	g := a.gd
+	g.mu.Lock()
+	g.cfg.Jeda = in.Jeda
+	g.simpan()
+	g.mu.Unlock()
 	writeJSON(w, 200, g.status())
 }
 
