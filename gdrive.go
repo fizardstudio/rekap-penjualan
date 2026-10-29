@@ -959,6 +959,7 @@ func (a *App) gdPulihkan(w http.ResponseWriter, r *http.Request, u *User) {
 	a.st.backupSebelum("pulihkan-drive")
 	a.st.d = d
 	a.st.rapikan()
+	a.st.perbaikiData()
 	err = a.st.save()
 	a.st.mu.Unlock()
 	if err != nil {

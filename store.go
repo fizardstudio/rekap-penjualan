@@ -19,6 +19,7 @@ type Settings struct {
 	PPh22     float64 `json:"pph22"`
 	PPh23     float64 `json:"pph23"`
 	Dibuat    string  `json:"dibuat"`
+	VersiData int     `json:"versiData,omitempty"` // perbaikan data yang sudah dijalankan (lihat perbaikiData)
 }
 
 type CV struct {
@@ -60,6 +61,21 @@ type Item struct {
 	Satuan   string  `json:"satuan"`
 	Harga    float64 `json:"harga"`
 	Jenis    string  `json:"jenis"`
+	K        string  `json:"k,omitempty"` // kode baris tetap, dipakai pencatatan pengiriman
+}
+
+// Kirim: satu kali pengiriman (surat jalan) untuk sebagian / seluruh barang pesanan.
+type Kirim struct {
+	ID      int         `json:"id"`
+	Tgl     string      `json:"tgl"`
+	NoSJ    string      `json:"noSJ"`
+	Catatan string      `json:"catatan,omitempty"`
+	Items   []KirimItem `json:"items"`
+}
+
+type KirimItem struct {
+	K   string  `json:"k"`
+	Qty float64 `json:"qty"`
 }
 
 type Transaksi struct {
@@ -93,6 +109,7 @@ type Transaksi struct {
 	Wapu        *bool    `json:"wapu,omitempty"`
 	PlatformFee float64  `json:"platformFee,omitempty"`
 	Items       []Item   `json:"items"`
+	Kirim       []Kirim  `json:"kirim,omitempty"` // pengiriman bertahap; nilai invoice tetap dari Items
 	Lampiran    []string `json:"lampiran,omitempty"`
 	Catatan     string   `json:"catatan,omitempty"`
 	Dibuat      string   `json:"dibuat,omitempty"`
@@ -166,7 +183,11 @@ func openStore(dir string) (*Store, error) {
 	}
 	s.ok = len(s.d.Users) > 0
 	s.rapikan()
-	if s.ok && s.d.Meta.ID == "" { // data dari versi lama: beri kode data sekali
+	ubah := s.ok && s.perbaikiData()
+	if s.ok && (s.d.Meta.ID == "" || ubah) { // data dari versi lama: beri kode data sekali / simpan hasil perbaikan
+		if ubah {
+			s.backupSebelum("perbaikan-data")
+		}
 		_ = s.save()
 	}
 	s.backupHarian()
@@ -229,6 +250,7 @@ func (s *Store) rapikan() {
 		if s.d.Transaksi[i].Items == nil {
 			s.d.Transaksi[i].Items = []Item{}
 		}
+		kodeBaris(&s.d.Transaksi[i])
 	}
 }
 
@@ -304,4 +326,89 @@ func addAlias(alias []string, nama string, utama string) []string {
 		alias = alias[1:]
 	}
 	return append(alias, n)
+}
+
+// hutangExcel: transaksi hasil migrasi yang di Excel BELANJA BPN ditandai "HUTANG" (belum dibayar satker).
+// Dicocokkan lewat nama file + sheet di catatan migrasi dan jumlah harga barangnya.
+var hutangExcel = []struct {
+	file, sheet, barang string
+	jumlah              float64
+}{
+	{"BELANJA BPN 2025.xlsx", "KOTA CIMAHI", "", 6297030},
+	{"BELANJA BPN 2025.xlsx", "KOTA BEKASI", "", 50652075},
+	{"BELANJA BPN 2025.xlsx", "KAB. GARUT", "", 70000000},
+	{"BELANJA BPN 2025.xlsx", "KAB. INDRAMAYU", "", 57050000}, // "SISA HUTANG"
+	{"BELANJA BPN 2025.xlsx", "KAB. SUBANG", "", 55000000},
+	{"BELANJA BPN 2025.xlsx", "KAB. KARAWANG", "KAIN SET PNS", 0}, // harga belum tercatat di Excel
+	{"BELANJA BPN 2025.xlsx", "KAB. BEKASI", "", 79211000},
+	{"BELANJA BPN 2025.xlsx", "CIANJUR", "", 18900000},
+}
+
+// perbaikiData menjalankan perbaikan data satu kali per versi. true bila ada yang diubah.
+func (s *Store) perbaikiData() bool {
+	ubah := false
+	if s.d.Settings.VersiData < 1 {
+		for i := range s.d.Transaksi {
+			t := &s.d.Transaksi[i]
+			if t.DibuatOleh != "migrasi" || t.Kanal == "HUTANG" {
+				continue
+			}
+			jml := 0.0
+			for _, it := range t.Items {
+				jml += it.Qty * it.Harga
+			}
+			for _, h := range hutangExcel {
+				if !strings.Contains(t.Catatan, h.file+" / sheet "+h.sheet) || (jml-h.jumlah > 1 || h.jumlah-jml > 1) {
+					continue
+				}
+				if h.barang != "" && (len(t.Items) == 0 || !strings.EqualFold(strings.TrimSpace(t.Items[0].Nama), h.barang)) {
+					continue
+				}
+				t.Kanal = "HUTANG"
+				if t.Status == "lunas" {
+					t.Status = "dikirim"
+				}
+				t.Catatan = strings.TrimSpace(t.Catatan + " · ditandai HUTANG di Excel (belum dibayar)")
+				break
+			}
+		}
+		s.d.Settings.VersiData = 1
+		ubah = true
+	}
+	if s.d.Settings.VersiData < 2 {
+		// Harga di semua transaksi adalah harga sebelum PPN (exclude); PPN & PPh dihitung terpisah di bawahnya.
+		// Versi lama menganggap transaksi Digipay dan sebagian data migrasi "harga sudah termasuk PPN".
+		for i := range s.d.Transaksi {
+			if s.d.Transaksi[i].InclPPN {
+				s.d.Transaksi[i].InclPPN = false
+			}
+		}
+		s.d.Settings.VersiData = 2
+		ubah = true
+	}
+	return ubah
+}
+
+// kodeBaris memberi kode tetap pada baris barang yang belum punya, dan membuang data pengiriman
+// untuk baris yang sudah dihapus.
+func kodeBaris(t *Transaksi) {
+	ada := map[string]bool{}
+	for i := range t.Items {
+		if t.Items[i].K == "" || ada[t.Items[i].K] {
+			t.Items[i].K = "b" + randHex(4)
+		}
+		ada[t.Items[i].K] = true
+	}
+	for i := range t.Kirim {
+		var keep []KirimItem
+		for _, x := range t.Kirim[i].Items {
+			if ada[x.K] && x.Qty > 0 {
+				keep = append(keep, x)
+			}
+		}
+		if keep == nil {
+			keep = []KirimItem{}
+		}
+		t.Kirim[i].Items = keep
+	}
 }

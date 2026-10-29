@@ -139,6 +139,7 @@ func (a *App) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/state", a.auth(false, a.state))
 	mux.HandleFunc("POST /api/transaksi", a.auth(false, a.saveTransaksi))
 	mux.HandleFunc("POST /api/transaksi/hapus", a.auth(true, a.hapusTransaksi))
+	mux.HandleFunc("POST /api/transaksi/kirim", a.auth(false, a.saveKirim))
 	mux.HandleFunc("POST /api/transaksi/pulihkan", a.auth(true, a.pulihkanTransaksi))
 	mux.HandleFunc("POST /api/satker", a.auth(false, a.saveSatker))
 	mux.HandleFunc("POST /api/satker/hapus", a.auth(true, a.hapusSatker))
@@ -235,6 +236,7 @@ func (a *App) setup(w http.ResponseWriter, r *http.Request) {
 	a.st.d.Users = []User{{ID: 1, Nama: strings.TrimSpace(in.Nama), Username: in.Username, Role: "admin", Aktif: true,
 		Salt: salt, Hash: hashPw(in.Password, salt)}}
 	a.st.rapikan()
+	a.st.perbaikiData()
 	if err := a.st.save(); err != nil {
 		fail(w, 500, "Gagal menyimpan: "+err.Error())
 		return
@@ -354,6 +356,10 @@ func (a *App) saveTransaksi(w http.ResponseWriter, r *http.Request, u *User) {
 			fail(w, 400, fmt.Sprintf("Barang baris %d: nama dan jumlah wajib diisi.", i+1))
 			return
 		}
+	}
+	if msg := cekKirim(&t); msg != "" {
+		fail(w, 400, msg)
+		return
 	}
 	// nomor transaksi tidak boleh dobel untuk kanal yang sama
 	if t.NoTrx != "" {
@@ -739,6 +745,7 @@ func (a *App) restore(w http.ResponseWriter, r *http.Request, u *User) {
 	}
 	a.st.d = d
 	a.st.rapikan()
+	a.st.perbaikiData()
 	if err := a.st.save(); err != nil {
 		fail(w, 500, err.Error())
 		return
@@ -832,4 +839,83 @@ func (a *App) hapusLampiran(w http.ResponseWriter, r *http.Request, u *User) {
 func (a *App) lihatLampiran(w http.ResponseWriter, r *http.Request, u *User) {
 	name := filepath.Base(r.PathValue("name"))
 	http.ServeFile(w, r, filepath.Join(a.st.dir, "lampiran", name))
+}
+
+// cekKirim: kode baris, nomor pengiriman, dan jumlah kirim tidak boleh melebihi pesanan.
+func cekKirim(t *Transaksi) string {
+	kodeBaris(t)
+	pesan := map[string]float64{}
+	nama := map[string]string{}
+	for _, it := range t.Items {
+		pesan[it.K] = it.Qty
+		nama[it.K] = it.Nama
+	}
+	jml := map[string]float64{}
+	maxID := 0
+	for _, k := range t.Kirim {
+		if k.ID > maxID {
+			maxID = k.ID
+		}
+	}
+	for i := range t.Kirim {
+		k := &t.Kirim[i]
+		if k.ID == 0 {
+			maxID++
+			k.ID = maxID
+		}
+		k.NoSJ = strings.TrimSpace(k.NoSJ)
+		if k.Tgl == "" {
+			return fmt.Sprintf("Pengiriman ke-%d: tanggal kirim wajib diisi.", i+1)
+		}
+		for _, x := range k.Items {
+			if x.Qty < 0 {
+				return "Jumlah kirim tidak boleh negatif."
+			}
+			jml[x.K] += x.Qty
+		}
+	}
+	for k, q := range jml {
+		if q > pesan[k]+1e-9 {
+			return fmt.Sprintf("Jumlah dikirim \"%s\" (%g) melebihi pesanan (%g).", nama[k], q, pesan[k])
+		}
+	}
+	if t.Kirim == nil {
+		t.Kirim = []Kirim{}
+	}
+	return ""
+}
+
+// saveKirim: perbarui data pengiriman saja (dari daftar transaksi), tanpa mengubah isi invoice.
+func (a *App) saveKirim(w http.ResponseWriter, r *http.Request, u *User) {
+	var in struct {
+		ID    int     `json:"id"`
+		Kirim []Kirim `json:"kirim"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		fail(w, 400, "Data tidak valid.")
+		return
+	}
+	a.st.mu.Lock()
+	defer a.st.mu.Unlock()
+	d := &a.st.d
+	for i := range d.Transaksi {
+		if d.Transaksi[i].ID != in.ID {
+			continue
+		}
+		t := d.Transaksi[i]
+		t.Kirim = in.Kirim
+		if msg := cekKirim(&t); msg != "" {
+			fail(w, 400, msg)
+			return
+		}
+		t.Diubah, t.DiubahOleh = now(), u.Nama
+		d.Transaksi[i] = t
+		if err := a.st.save(); err != nil {
+			fail(w, 500, "Gagal menyimpan: "+err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]any{"ok": true, "kirim": t.Kirim})
+		return
+	}
+	fail(w, 404, "Transaksi tidak ditemukan.")
 }

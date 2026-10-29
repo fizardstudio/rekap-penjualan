@@ -98,8 +98,8 @@ function grafikKolom(el, cfg) {
     if (i === imax && tot[i] > 0) { const vl = sv("text", { x: cx, y: y(tot[i]) - 6, "text-anchor": "middle", class: "vl" }, svg); vl.textContent = ringkas(tot[i]); }
     const show = ev => {
       bg.setAttribute("fill", "#f2f5f9");
-      const rows = cfg.series.map(s => ({ color: s.color, label: s.label, value: "Rp " + rp(s.values[i] || 0) }));
-      tampilTT(ev, cfg.tipJudul ? cfg.tipJudul(i) : c, rows, "Total Rp " + rp(tot[i]));
+      const rows = cfg.series.map(s => ({ color: s.color, label: s.label, value: rp(s.values[i] || 0) }));
+      tampilTT(ev, cfg.tipJudul ? cfg.tipJudul(i) : c, rows, "Total " + rp(tot[i]));
     };
     g.addEventListener("pointermove", show);
     g.addEventListener("focus", () => { const r = bg.getBoundingClientRect(); show({ clientX: r.right, clientY: r.top + 20 }); });
@@ -150,7 +150,7 @@ function grafikGaris(el, cfg) {
     const i = Math.max(0, Math.min(cfg.cats.length - 1, Math.round(((px - m.l) / iw) * (cfg.cats.length - 1))));
     ch.setAttribute("x1", x(i)); ch.setAttribute("x2", x(i)); ch.setAttribute("visibility", "visible");
     cfg.series.forEach((s, k) => { const v = s.values[i]; if (v == null) { dots[k].setAttribute("visibility", "hidden"); return; } dots[k].setAttribute("cx", x(i)); dots[k].setAttribute("cy", y(v)); dots[k].setAttribute("visibility", "visible"); });
-    tampilTT(ev, cfg.tipJudul ? cfg.tipJudul(i) : cfg.cats[i], cfg.series.filter(s => s.values[i] != null).map(s => ({ color: s.color, label: s.label, value: "Rp " + rp(s.values[i]) })), cfg.tipFoot ? cfg.tipFoot(i) : "");
+    tampilTT(ev, cfg.tipJudul ? cfg.tipJudul(i) : cfg.cats[i], cfg.series.filter(s => s.values[i] != null).map(s => ({ color: s.color, label: s.label, value: rp(s.values[i]) })), cfg.tipFoot ? cfg.tipFoot(i) : "");
   });
   hit.addEventListener("pointerleave", () => { ch.setAttribute("visibility", "hidden"); dots.forEach(d => d.setAttribute("visibility", "hidden")); sembunyiTT(); });
 }
@@ -183,7 +183,7 @@ function batangH(el, rows, warna, fmt) {
     tr.appendChild(bar);
     const v = document.createElement("div"); v.className = "hb-v"; v.textContent = fmt(r.value);
     row.append(lab, tr, v);
-    const show = ev => tampilTT(ev, r.label, r.segs ? r.segs.filter(s => s.v > 0).map(s => ({ color: s.color, label: s.label, value: "Rp " + rp(s.v) })) : [{ color: warna, label: r.tipLabel || "Nilai", value: r.tipValue || "Rp " + rp(r.value) }], r.tipFoot || (r.segs ? "Total Rp " + rp(r.value) : ""));
+    const show = ev => tampilTT(ev, r.label, r.segs ? r.segs.filter(s => s.v > 0).map(s => ({ color: s.color, label: s.label, value: rp(s.v) })) : [{ color: warna, label: r.tipLabel || "Nilai", value: r.tipValue || rp(r.value) }], r.tipFoot || (r.segs ? "Total " + rp(r.value) : ""));
     row.addEventListener("pointermove", show);
     row.addEventListener("pointerleave", sembunyiTT);
     if (r.onClick) { row.style.cursor = "pointer"; row.addEventListener("click", () => { sembunyiTT(); r.onClick(); }); }
@@ -216,8 +216,8 @@ function pgDashboard(el) {
   const bulanTot = perBulan(null);
   const nTrx = L.length, rata = nTrx ? total / nTrx : 0;
   const pph = sum(L, "pph"), bersih = sum(L, "bersih"), ppn = sum(L, "ppn");
-  const tagih = S.data.transaksi.filter(t => aktif(t) && t.status !== "lunas" && t.dibuatOleh !== "migrasi" && (!F.cv || t.cv === F.cv) && (!F.kanal || t.kanal === F.kanal))
-    .sort((a, b) => (a.tanggal || "").localeCompare(b.tanggal || ""));
+  const tagih = S.data.transaksi.filter(t => perluTagih(t) && (!F.cv || t.cv === F.cv) && (!F.kanal || t.kanal === F.kanal))
+    .sort((a, b) => (a.tanggal || "9999").localeCompare(b.tanggal || "9999"));
   const nilaiTagih = tagih.reduce((a, t) => a + h(t).total, 0);
   const umur = t => t.tanggal ? Math.max(0, Math.round((new Date(today()) - new Date(t.tanggal)) / 864e5)) : 0;
   const bln = BLN3;
@@ -237,7 +237,7 @@ function pgDashboard(el) {
       <div class="lbl">Total penjualan ${thn}</div>
       <div class="big">Rp ${rpS(total)}</div>
       <div class="sub">${deltaHtml}</div>
-      <div class="row" style="justify-content:space-between;align-items:flex-end;margin-top:10px"><div class="small mute">Rp ${rp(total)}<br>${nTrx} transaksi · ${new Set(L.map(t => t.satkerId)).size} satker</div>${sparkline(bulanTot.slice(0, bulanSampai))}</div>
+      <div class="row" style="justify-content:space-between;align-items:flex-end;margin-top:10px"><div class="small mute">${rp(total)}<br>${nTrx} transaksi · ${new Set(L.map(t => t.satkerId)).size} satker</div>${sparkline(bulanTot.slice(0, bulanSampai))}</div>
     </div>
     <div class="tiles s7">
       <div class="dcard tile"><div class="lbl">Rata-rata per transaksi</div><div class="val">Rp ${rpS(rata)}</div><div class="sub mute">${nTrx} transaksi</div></div>
@@ -255,7 +255,7 @@ function pgDashboard(el) {
     <div class="dcard s6"><div class="dh"><div><h2>Kumulatif ${thn} vs ${thn - 1}</h2><div class="mute small">Akumulasi penjualan dari Januari</div></div></div>
       ${Lp.length ? legenda([{ label: String(thn), color: "#2a78d6" }, { label: String(thn - 1), color: ABU }], "garis") : `<div class="lg"><span class="mute">Belum ada data ${thn - 1} untuk dibandingkan</span></div>`}
       <div id="gKum" class="chart"></div></div>
-    <div class="dcard s6"><div class="dh"><div><h2>Perlu ditagih</h2><div class="mute small">Belum berstatus Lunas (data migrasi tidak dihitung) · terlama di atas</div></div><a href="#/transaksi" id="aTagih" class="small">Semua →</a></div>
+    <div class="dcard s6"><div class="dh"><div><h2>Perlu ditagih</h2><div class="mute small">Belum berstatus Lunas (termasuk hutang dari data Excel lama) · terlama di atas</div></div><a href="#/transaksi" id="aTagih" class="small">Semua →</a></div>
       <div id="lTagih" class="tagih"></div></div>
 
     <div class="dcard s6"><div class="dh"><div><h2>10 satker terbesar</h2><div class="mute small">Nilai ${thn}, warna = CV</div></div></div><div id="gSatker"></div></div>
@@ -287,9 +287,9 @@ function pgDashboard(el) {
 
   // 3. perlu ditagih
   const lt = $("#lTagih");
-  lt.innerHTML = tagih.length ? tagih.slice(0, 7).map(t => { const s = satkerById(t.satkerId), u = umur(t); return `<a class="tg" href="#/trx/${t.id}">${cvBadge(t.cv)}<span class="tg-n">${esc(s.singkat || s.nama)}<small>${esc(KANAL[t.kanal].label)} · ${esc(t.noTrx || "–")} · ${tgl(t.tanggal)}</small></span><span class="tg-v">Rp ${rp(h(t).total)}<small class="${u > 30 ? "old" : ""}">${u} hari · ${STATUS[t.status]}</small></span></a>`; }).join("") + (tagih.length > 7 ? `<div class="small mute" style="padding:8px 2px">+${tagih.length - 7} transaksi lagi</div>` : "")
+  lt.innerHTML = tagih.length ? tagih.slice(0, 7).map(t => { const s = satkerById(t.satkerId), u = umur(t); return `<a class="tg" href="#/trx/${t.id}">${cvBadge(t.cv)}<span class="tg-n">${esc(s.singkat || s.nama)}<small>${esc(KANAL[t.kanal].label)} · ${esc(t.noTrx || "–")} · ${tgl(t.tanggal)}</small></span><span class="tg-v">${rp(h(t).total)}<small class="${u > 30 ? "old" : ""}">${u} hari · ${STATUS[t.status]}</small></span></a>`; }).join("") + (tagih.length > 7 ? `<div class="small mute" style="padding:8px 2px">+${tagih.length - 7} transaksi lagi</div>` : "")
     : `<div class="kosong">✓ Tidak ada tagihan tertunda.</div>`;
-  const ft = () => { S.filters.trx = { tahun: "", cv: F.cv, kanal: F.kanal }; };
+  const ft = () => { S.filters.trx = { tahun: "", cv: F.cv, kanal: F.kanal, tagih: 1 }; };
   $("#aTagih").onclick = ft;
   $("#tTagih").onclick = () => { ft(); location.hash = "#/transaksi"; };
 

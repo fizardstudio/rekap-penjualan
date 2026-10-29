@@ -1,5 +1,5 @@
 /* Rekap Penjualan Instansi — CV. PKM / CV. OSI / CV. DKS
-   Kanal: Digipay, INAPROC (Katalog v6), Mbizmarket, Lainnya. */
+   Kanal: Digipay, INAPROC (Katalog v6), Mbizmarket, Manual (penjualan langsung), Hutang (kirim dulu, bayar belakangan). */
 "use strict";
 const P = window.Parsers;
 
@@ -8,7 +8,7 @@ const $ = (s, el) => (el || document).querySelector(s);
 const $$ = (s, el) => Array.from((el || document).querySelectorAll(s));
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtN = (n, d) => (Number(n) || 0).toLocaleString("id-ID", { minimumFractionDigits: d || 0, maximumFractionDigits: d == null ? 2 : d });
-const rp = n => fmtN(Math.round(Number(n) || 0), 0);
+const rp = n => "Rp " + fmtN(Math.round((Number(n) || 0) * 100) / 100, 2); // selalu "Rp 1.234.567,00"
 const rpS = n => { // singkat: 1,2 M / 345 jt
   n = Number(n) || 0; const a = Math.abs(n);
   if (a >= 1e9) return fmtN(n / 1e9, 2) + " M";
@@ -22,14 +22,15 @@ const BULAN = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "
 const BLN3 = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
 const KANAL = {
-  DIGIPAY: { label: "Digipay", incl: true, no: "No. Invoice", ph: "429740/00/20261023/074531" },
+  DIGIPAY: { label: "Digipay", incl: false, no: "No. Invoice", ph: "429740/00/20261023/074531" },
   INAPROC: { label: "INAPROC", incl: false, no: "No. Surat Pesanan / ID Paket", ph: "EP-01M4QP..." },
   MBIZ: { label: "Mbizmarket", incl: false, no: "No. Pesanan (PO)", ph: "PO-190917-260811-1" },
-  LAINNYA: { label: "Lainnya / Manual", incl: false, no: "No. Referensi", ph: "TF / via WA / dll" },
+  LAINNYA: { label: "Manual", incl: false, no: "No. Referensi", ph: "TF / via WA / dll", ket: "penjualan langsung di luar kanal" },
+  HUTANG: { label: "Hutang", incl: false, no: "No. Referensi / nota", ph: "nota / via WA", ket: "barang dikirim dulu, satker membayar belakangan" },
 };
 // logo kanal & CV (web/img/*.png) supaya bisa dibedakan sekilas tanpa membaca nama
 const CV_LOGO = { PKM: 1, OSI: 1, DKS: 1 };
-const kanalIkon = (k, cls = "") => KANAL[k] && k !== "LAINNYA" ? `<img class="klogo ${cls}" src="img/kanal-${k}.png" alt="">` : `<span class="klogo kl-x ${cls}">✎</span>`;
+const kanalIkon = (k, cls = "") => KANAL[k] && k !== "LAINNYA" && k !== "HUTANG" ? `<img class="klogo ${cls}" src="img/kanal-${k}.png" alt="">` : k === "HUTANG" ? `<span class="klogo kl-x kl-h ${cls}">⏳</span>` : `<span class="klogo kl-x ${cls}">✎</span>`;
 const cvIkon = (k, cls = "") => CV_LOGO[k] ? `<img class="klogo cvl ${cls}" src="img/cv-${k}.png" alt="">` : `<span class="klogo kl-x ${cls}">${esc(String(k || "?").slice(0, 1))}</span>`;
 const kanalBadge = k => `<span class="b ${k} bk">${kanalIkon(k)}${KANAL[k] ? KANAL[k].label : esc(k || "")}</span>`;
 const cvBadge = c => `<span class="b ${c} bk">${cvIkon(c)}${esc(c)}</span>`;
@@ -40,7 +41,7 @@ function pilihLogo(selAttr, sel, label, items, all, kosong) {
   const btn = (v, isi, judul) => `<button type="button" class="kp-b ${v === sel ? "on" : ""}" data-kv="${esc(v)}" title="${esc(judul)}">${isi}</button>`;
   return `<div class="f kp"><span>${label}</span><select ${selAttr} hidden>${opts}</select><div class="kp-g">${all ? btn("", esc(all), all) : ""}${items.map(it => btn(it[0], it[1] + `<span>${esc(it[2])}</span>`, it[3] || it[2])).join("")}</div></div>`;
 }
-const kanalPilih = (selAttr, sel, all, label) => pilihLogo(selAttr, sel, label, Object.keys(KANAL).map(k => [k, kanalIkon(k), KANAL[k].label.replace(" / Manual", ""), KANAL[k].label]), all);
+const kanalPilih = (selAttr, sel, all, label) => pilihLogo(selAttr, sel, label, Object.keys(KANAL).map(k => [k, kanalIkon(k), KANAL[k].label, KANAL[k].label + (KANAL[k].ket ? " — " + KANAL[k].ket : "")]), all);
 const cvPilih = (selAttr, sel, all, label, kosong) => pilihLogo(selAttr, sel, label, S.data.cv.map(c => [c.kode, cvIkon(c.kode), c.kode, c.nama]), all, kosong);
 document.addEventListener("click", e => {
   const b = e.target.closest(".kp-b"); if (!b) return;
@@ -159,6 +160,85 @@ function hitung(t) {
   const wapu = pakaiPPN && t.wapu !== false;
   const bersih = total - (wapu ? ppn : 0) - pph22 - pph23 - fee;
   return { bruto, dpp, ppn, total, pph22, pph23, pph: pph22 + pph23, fee, wapu, bersih, pakaiPPN, incl, adaB, adaJ };
+}
+
+// Harga master = harga instansi (termasuk PPN). Transaksi diisi harga sebelum PPN (exclude),
+// kecuali transaksi yang dicentang "Harga sudah termasuk PPN".
+const hargaEx = b => Math.round((Number(b.harga) || 0) / (1 + (S.data.settings.ppn || 11) / 100));
+const hargaPakai = (b, t) => (t && t.inclPPN && !t.noPPN) ? Number(b.harga) || 0 : hargaEx(b);
+
+// ================================================================ pengiriman bertahap
+// Nilai invoice selalu dari t.items. t.kirim = [{id, tgl, noSJ, catatan, items:[{k, qty}]}] mencatat barang yang benar-benar dikirim.
+const kodeB = () => "b" + Math.random().toString(16).slice(2, 10);
+function pastikanKode(t) { const ada = new Set(); (t.items || []).forEach(it => { if (!it.k || ada.has(it.k)) it.k = kodeB(); ada.add(it.k); }); t.kirim = t.kirim || []; }
+function dikirimPer(t) { const m = {}; (t.kirim || []).forEach(k => (k.items || []).forEach(x => m[x.k] = (m[x.k] || 0) + (Number(x.qty) || 0))); return m; }
+// status pengiriman: "" (belum dicatat) | "belum" | "sebagian" | "lengkap"
+function statusKirim(t) {
+  if (!(t.kirim || []).length) return "";
+  const m = dikirimPer(t); let pesan = 0, kirim = 0;
+  (t.items || []).forEach(it => { pesan += Number(it.qty) || 0; kirim += Math.min(Number(it.qty) || 0, m[it.k] || 0); });
+  return kirim <= 0 ? "belum" : kirim + 1e-9 >= pesan ? "lengkap" : "sebagian";
+}
+const KIRIM_LBL = { belum: "Belum dikirim", sebagian: "Dikirim sebagian", lengkap: "Dikirim lengkap" };
+const kirimBadge = t => { const s = statusKirim(t); return s ? `<span class="b kr-${s}">${KIRIM_LBL[s]}</span>` : ""; };
+// hitungan baru berdasarkan barang yang sudah dikirim (pajak ikut aturan transaksi)
+function hitungKirim(t) { const m = dikirimPer(t); return hitung(Object.assign({}, t, { items: (t.items || []).map(it => Object.assign({}, it, { qty: Math.min(Number(it.qty) || 0, m[it.k] || 0) })) })); }
+
+// Editor pengiriman, dipakai di form transaksi dan di jendela "Edit pengiriman" dari daftar.
+// onUbah() dipanggil setiap ada perubahan (T.kirim sudah diperbarui).
+function editorKirim(box, T, onUbah) {
+  pastikanKode(T);
+  const isi = () => (T.items || []).filter(it => String(it.nama || "").trim() && Number(it.qty) > 0);
+  const draw = () => {
+    pastikanKode(T);
+    const m = dikirimPer(T), items = isi();
+    const ringkas = items.map(it => { const d = m[it.k] || 0, q = Number(it.qty) || 0, sisa = Math.max(0, q - d), p = q ? Math.min(100, Math.round(100 * d / q)) : 0;
+      return `<tr><td>${esc(it.nama)}</td><td class="num">${fmtN(q)} ${esc(it.satuan || "")}</td><td class="num">${fmtN(d)}</td><td class="num ${sisa ? "warnc" : "okc"}">${sisa ? fmtN(sisa) : "✓"}</td><td style="width:120px"><div class="prog"><i style="width:${p}%"></i></div></td></tr>`; }).join("");
+    const kartu = (T.kirim || []).map((k, ki) => `<div class="kr-card" data-ki="${ki}">
+      <div class="kr-h"><b>Kirim ke-${ki + 1}</b>
+        <label class="f"><span>Tanggal kirim</span><input type="date" class="kTgl" value="${esc(k.tgl || "")}"></label>
+        <label class="f"><span>No. surat jalan</span><div class="row" style="flex-wrap:nowrap"><input class="kSJ" value="${esc(k.noSJ || "")}" placeholder="S1026-2058"><button class="sm kAuto" type="button" title="Nomor otomatis">Auto</button></div></label>
+        <label class="f" style="flex:1;min-width:160px"><span>Catatan</span><input class="kCat" value="${esc(k.catatan || "")}" placeholder="mis. sisa menyusul"></label>
+        <button class="sm ghost danger kDel" type="button" title="Hapus pengiriman ini">✕ Hapus</button></div>
+      <table class="kr-t"><thead><tr><th>Barang</th><th class="num">Dipesan</th><th class="num">Dikirim kali ini</th></tr></thead><tbody>
+      ${items.map(it => { const x = (k.items || []).find(x => x.k === it.k); return `<tr><td>${esc(it.nama)}</td><td class="num mute">${fmtN(it.qty)}</td><td class="num"><input class="kQty num" type="number" min="0" step="any" data-k="${it.k}" value="${x && x.qty ? x.qty : ""}" placeholder="0"></td></tr>`; }).join("")}
+      </tbody></table></div>`).join("");
+    const hk = hitungKirim(T), hi = hitung(T), st = statusKirim(T);
+    box.innerHTML = `
+      ${items.length ? `<div class="tw"><table class="kr-sum"><thead><tr><th>Barang</th><th class="num">Dipesan</th><th class="num">Sudah dikirim</th><th class="num">Sisa</th><th></th></tr></thead><tbody>${ringkas}</tbody></table></div>` : `<p class="mute small">Isi barang dulu.</p>`}
+      <div id="krList">${kartu || `<p class="mute small" style="margin:10px 0">Belum ada pengiriman dicatat. Klik <b>+ Catat pengiriman</b> setiap kali barang dikirim (boleh berkali-kali sampai jumlah pesanan terpenuhi).</p>`}</div>
+      <div class="row" style="justify-content:space-between;align-items:flex-start;margin-top:10px">
+        <button class="sm pri" type="button" id="krAdd" ${items.length ? "" : "disabled"}>+ Catat pengiriman</button>
+        ${(T.kirim || []).length ? `<div class="sumbox kr-nilai"><div class="ln"><span><b>Nilai sesuai pengiriman</b> ${st ? `<span class="b kr-${st}">${KIRIM_LBL[st]}</span>` : ""}</span><span></span></div>
+          <div class="ln"><span>DPP terkirim</span><span>${rp(hk.dpp)}</span></div>
+          ${hk.pakaiPPN ? `<div class="ln"><span>PPN</span><span>${rp(hk.ppn)}</span></div>` : ""}
+          <div class="ln big"><span>TOTAL TERKIRIM</span><span>${rp(hk.total)}</span></div>
+          ${hk.pph ? `<div class="ln minus"><span>PPh</span><span>(${rp(hk.pph)})</span></div>` : ""}
+          <div class="ln net"><span>Diterima bersih (terkirim)</span><span>${rp(hk.bersih)}</span></div>
+          <div class="ln small mute"><span>Invoice awal tetap</span><span>${rp(hi.total)}</span></div></div>` : ""}
+      </div>`;
+    $$(".kr-card", box).forEach(c => {
+      const k = T.kirim[+c.dataset.ki];
+      $(".kTgl", c).onchange = e => { k.tgl = e.target.value; onUbah(); };
+      $(".kSJ", c).oninput = e => { k.noSJ = e.target.value; onUbah(true); };
+      $(".kCat", c).oninput = e => { k.catatan = e.target.value; onUbah(true); };
+      $(".kAuto", c).onclick = () => { if (!T.cv) return toast("Pilih CV dulu.", true); k.noSJ = nomorSJ(Object.assign({}, T, { tanggal: k.tgl || T.tanggal }), true); $(".kSJ", c).value = k.noSJ; onUbah(true); };
+      $(".kDel", c).onclick = async () => { if (!(await confirmBox("Hapus catatan pengiriman ini?", "Hapus"))) return; T.kirim.splice(+c.dataset.ki, 1); draw(); onUbah(); };
+      $$(".kQty", c).forEach(inp => inp.oninput = () => {
+        const v = Number(inp.value) || 0; k.items = (k.items || []).filter(x => x.k !== inp.dataset.k); if (v > 0) k.items.push({ k: inp.dataset.k, qty: v });
+        clearTimeout(inp._t); inp._t = setTimeout(() => { const pos = inp.dataset.k; draw(); onUbah(); const n = $(`.kr-card[data-ki="${c.dataset.ki}"] .kQty[data-k="${pos}"]`, box); if (n) { n.focus(); try { n.setSelectionRange(n.value.length, n.value.length); } catch (er) { /* */ } } }, 600);
+      });
+    });
+    $("#krAdd", box).onclick = () => {
+      const m = dikirimPer(T);
+      const k = { id: 0, tgl: today(), noSJ: "", catatan: "", items: isi().map(it => ({ k: it.k, qty: Math.max(0, (Number(it.qty) || 0) - (m[it.k] || 0)) })).filter(x => x.qty > 0) };
+      if (T.cv) k.noSJ = nomorSJ(Object.assign({}, T, { tanggal: k.tgl }), true);
+      T.kirim.push(k); draw(); onUbah();
+      if (!k.items.length) toast("Semua barang sudah terkirim penuh. Isi jumlahnya bila memang ada pengiriman tambahan.");
+    };
+  };
+  draw();
+  return { draw };
 }
 
 // ================================================================ pencocokan master
@@ -469,6 +549,8 @@ function optList(obj, sel, all) {
 const cvOpts = () => Object.fromEntries(S.data.cv.map(c => [c.kode, c.kode]));
 const kanalOpts = () => Object.fromEntries(Object.entries(KANAL).map(([k, v]) => [k, v.label]));
 const aktif = t => t.status !== "batal";
+// perlu ditagih: belum lunas. Data migrasi Excel dianggap sudah dibayar, kecuali yang di Excel ditandai HUTANG.
+const perluTagih = t => aktif(t) && t.status !== "lunas" && (t.dibuatOleh !== "migrasi" || t.kanal === "HUTANG");
 
 // ================================================================ BERANDA
 function pgBeranda(el) {
@@ -482,7 +564,7 @@ function pgBeranda(el) {
     const h = hitung(t); const b = +t.tanggal.slice(5, 7) - 1;
     if (m[t.cv]) m[t.cv][b] += h.total;
     tot += h.total; pph += h.pph;
-    if (t.status !== "lunas" && t.dibuatOleh !== "migrasi") { belum += h.total; belumN++; }
+    if (perluTagih(t)) { belum += h.total; belumN++; }
     perKanal[t.kanal] = perKanal[t.kanal] || {}; perKanal[t.kanal][t.cv] = (perKanal[t.kanal][t.cv] || 0) + h.total;
   }
   const colTot = Array(12).fill(0).map((_, i) => cvs.reduce((a, c) => a + m[c][i], 0));
@@ -497,7 +579,7 @@ function pgBeranda(el) {
   <div class="kpis">
     <div class="kpi"><div class="l">Total penjualan ${F.tahun}</div><div class="v">Rp ${rpS(tot)}</div><div class="s">${list.length} transaksi</div></div>
     ${cvs.map(c => `<div class="kpi"><div class="l">${cvBadge(c)} ${esc(cvNama(c).replace(/^CV\.\s*/, ""))}</div><div class="v">Rp ${rpS(m[c].reduce((a, b) => a + b, 0))}</div><div class="s">${list.filter(t => t.cv === c).length} transaksi</div></div>`).join("")}
-    <div class="kpi"><div class="l">PPh dipotong (22 + 23)</div><div class="v">Rp ${rpS(pph)}</div><div class="s">Belum lunas: ${belumN} trx · Rp ${rpS(belum)}<br><span class="small">(data migrasi tidak dihitung)</span></div></div>
+    <div class="kpi"><div class="l">PPh dipotong (22 + 23)</div><div class="v">Rp ${rpS(pph)}</div><div class="s">Belum lunas: ${belumN} trx · Rp ${rpS(belum)}<br><span class="small">(data migrasi dihitung bila ditandai hutang)</span></div></div>
   </div>
   <div class="card tight"><div class="card-h"><h2 style="margin:0">Penjualan per bulan — ${F.tahun}</h2><button class="sm" id="xBeranda">Unduh Excel</button></div>
   <div class="tw"><table class="mx"><thead><tr><th>CV</th>${BLN3.map(b => `<th class="num">${b}</th>`).join("")}<th class="num">Total</th></tr></thead><tbody>
@@ -515,19 +597,64 @@ function pgBeranda(el) {
   bindTrxRows(el);
 }
 
-function tabelTrx(list) {
+function tabelTrx(list, bukaSemua) {
   if (!list.length) return `<p class="mute" style="padding:16px">Belum ada transaksi.</p>`;
-  return `<div class="tw"><table><thead><tr><th>Tanggal</th><th>CV</th><th>Kanal</th><th>Satker / instansi</th><th>No. transaksi</th><th class="num">Item</th><th class="num">Total (inc. PPN)</th><th class="num">PPh</th><th>Status</th></tr></thead><tbody>
-  ${list.map(t => { const h = hitung(t); const s = satkerById(t.satkerId); return `<tr class="click" data-id="${t.id}"><td class="nowrap">${t.tanggal ? tgl(t.tanggal) : '<span class="b warn">tanpa tgl</span>'}</td><td>${cvBadge(t.cv)}</td><td>${kanalBadge(t.kanal)}</td><td>${esc(s.singkat || s.nama)}<div class="sub small mute">${esc(s.nama)}</div></td><td class="small">${esc(t.noTrx || "–")}${t.noSJ ? `<div class="mute">SJ ${esc(t.noSJ)}</div>` : ""}</td><td class="num">${t.items.length}</td><td class="num"><b>${rp(h.total)}</b>${t.noPPN ? '<div><span class="b warn">tanpa PPN</span></div>' : ""}</td><td class="num">${rp(h.pph)}${(t.noPPh22 && h.adaB) || (t.noPPh23 && h.adaJ) ? '<div><span class="b warn">tanpa PPh</span></div>' : ""}</td><td><span class="b ${t.status}">${STATUS[t.status] || t.status}</span></td></tr>`; }).join("")}
+  return `<div class="tw"><table class="trx"><thead><tr><th class="c-x"></th><th>Tanggal</th><th>CV</th><th>Kanal</th><th>Satker / instansi</th><th>No. transaksi</th><th class="num">Item</th><th class="num">Total (inc. PPN)</th><th class="num">PPh</th><th>Status</th></tr></thead><tbody>
+  ${list.map(t => { const h = hitung(t); const s = satkerById(t.satkerId); return `<tr class="click" data-id="${t.id}"><td class="c-x"><button class="sm ghost tg-det" title="Tampilkan rincian barang & pengiriman" data-tg="${t.id}">${bukaSemua ? "▾" : "▸"}</button></td><td class="nowrap">${t.tanggal ? tgl(t.tanggal) : '<span class="b warn">tanpa tgl</span>'}</td><td>${cvBadge(t.cv)}</td><td>${kanalBadge(t.kanal)}</td><td>${esc(s.singkat || s.nama)}<div class="sub small mute">${esc(s.nama)}</div></td><td class="small">${esc(t.noTrx || "–")}${t.noSJ ? `<div class="mute">SJ ${esc(t.noSJ)}</div>` : ""}</td><td class="num">${t.items.length}</td><td class="num"><b>${rp(h.total)}</b>${t.noPPN ? '<div><span class="b warn">tanpa PPN</span></div>' : ""}</td><td class="num">${rp(h.pph)}${(t.noPPh22 && h.adaB) || (t.noPPh23 && h.adaJ) ? '<div><span class="b warn">tanpa PPh</span></div>' : ""}</td><td><span class="b ${t.status}">${STATUS[t.status] || t.status}</span>${statusKirim(t) ? `<div style="margin-top:3px">${kirimBadge(t)}</div>` : ""}</td></tr>
+    <tr class="det" data-det="${t.id}" ${bukaSemua ? "" : "hidden"}><td colspan="10">${bukaSemua ? detailTrx(t) : ""}</td></tr>`; }).join("")}
   </tbody></table></div>`;
 }
-function bindTrxRows(el) { $$("tr.click[data-id]", el).forEach(tr => tr.onclick = () => location.hash = "#/trx/" + tr.dataset.id); }
+// rincian barang + pengiriman satu transaksi (tampil di bawah barisnya)
+function detailTrx(t) {
+  const h = hitung(t), m = dikirimPer(t), adaKirim = (t.kirim || []).length;
+  const rows = t.items.map((it, i) => { const d = m[it.k] || 0, sisa = Math.max(0, (Number(it.qty) || 0) - d);
+    return `<tr><td class="mute">${i + 1}</td><td>${esc(it.nama)}${it.jenis === "J" ? ' <span class="b warn">JASA</span>' : ""}</td><td class="num">${fmtN(it.qty)}</td>${adaKirim ? `<td class="num">${fmtN(d)}</td><td class="num ${sisa ? "warnc" : "okc"}">${sisa ? fmtN(sisa) : "✓"}</td>` : ""}<td>${esc(it.satuan || "")}</td><td class="num">${rp(it.harga)}</td><td class="num">${rp((Number(it.qty) || 0) * (Number(it.harga) || 0))}</td></tr>`; }).join("");
+  const hk = adaKirim ? hitungKirim(t) : null;
+  return `<div class="det-box">
+    <table class="det-t"><thead><tr><th>No</th><th>Nama barang</th><th class="num">Qty</th>${adaKirim ? `<th class="num">Dikirim</th><th class="num">Sisa</th>` : ""}<th>Satuan</th><th class="num">Harga</th><th class="num">Jumlah</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="det-f">
+      <div class="det-sum">DPP ${rp(h.dpp)} · PPN ${h.pakaiPPN ? rp(h.ppn) : "tidak dikenakan"} · <b>Total ${rp(h.total)}</b> · PPh ${rp(h.pph)} · bersih ${rp(h.bersih)}
+        ${hk ? `<br><span class="okc">Sesuai pengiriman: <b>${rp(hk.total)}</b> · bersih ${rp(hk.bersih)}</span>` : ""}</div>
+      <div class="det-kirim">${adaKirim ? t.kirim.map((k, i) => `<span class="b k">Kirim ${i + 1}: ${tgl(k.tgl)}${k.noSJ ? " · SJ " + esc(k.noSJ) : ""} · ${fmtN((k.items || []).reduce((a, x) => a + x.qty, 0))} unit</span>`).join(" ") : '<span class="mute small">Belum ada pengiriman dicatat.</span>'}</div>
+      <div class="row"><button class="sm pri" data-edkirim="${t.id}">🚚 Edit pengiriman</button><a class="btn sm" href="#/trx/${t.id}">Buka / edit transaksi →</a></div>
+    </div></div>`;
+}
+function bindTrxRows(el) {
+  $$("tr.click[data-id]", el).forEach(tr => tr.onclick = e => {
+    if (e.target.closest(".tg-det")) {
+      const id = tr.dataset.id, det = $(`tr[data-det="${id}"]`, el), btn = $(".tg-det", tr);
+      const buka = det.hidden; det.hidden = !buka; btn.textContent = buka ? "▾" : "▸";
+      if (buka) { const t = S.data.transaksi.find(x => String(x.id) === id); $("td", det).innerHTML = detailTrx(t); ikatDetail(det); }
+      return;
+    }
+    location.hash = "#/trx/" + tr.dataset.id;
+  });
+  $$("tr.det:not([hidden])", el).forEach(ikatDetail);
+}
+function ikatDetail(det) {
+  const b = $("[data-edkirim]", det); if (b) b.onclick = () => dlgKirim(S.data.transaksi.find(x => String(x.id) === b.dataset.edkirim));
+}
+// jendela edit pengiriman dari daftar (tanpa membuka form)
+function dlgKirim(t) {
+  const T = clone(t); pastikanKode(T);
+  const s = satkerById(T.satkerId);
+  const m = modal("Pengiriman — " + (T.noTrx || "transaksi #" + T.id), `<div class="small mute" style="margin-bottom:8px">${cvBadge(T.cv)} ${kanalBadge(T.kanal)} · ${esc(s.nama)} · ${tgl(T.tanggal)} · invoice ${rp(hitung(T).total)}</div><div id="dk"></div>`,
+    { wide: true, buttons: [{ label: "Batal" }, { label: "Simpan pengiriman", cls: "pri", onClick: async () => {
+      try {
+        await api("/api/transaksi/kirim", { id: T.id, kirim: T.kirim.map(k => ({ id: k.id || 0, tgl: k.tgl, noSJ: k.noSJ || "", catatan: k.catatan || "", items: (k.items || []).filter(x => x.qty > 0) })), items: T.items });
+        toast("Pengiriman tersimpan"); await loadState(); render();
+      } catch (e) { toast(e.message, true); return false; }
+    } }] });
+  editorKirim($("#dk", m.el), T, () => {});
+}
 
 // ================================================================ DAFTAR TRANSAKSI
 function filterTrx(F) {
   const q = P.norm(F.q || "");
   return S.data.transaksi.filter(t => {
     if (F.tanpaTgl) return !t.tanggal;
+    if (F.tagih && !perluTagih(t)) return false;
+    if (F.kirim && statusKirim(t) !== F.kirim) return false;
     if (F.tahun && !t.tanggal.startsWith(F.tahun)) return false;
     if (F.bulan && t.tanggal.slice(5, 7) !== F.bulan) return false;
     if (F.cv && t.cv !== F.cv) return false;
@@ -550,7 +677,7 @@ function pgTransaksi(el) {
   list.forEach(t => { const h = hitung(t); for (const k in sum) sum[k] += h[k]; });
   const satkerUsed = Array.from(new Set(S.data.transaksi.map(t => t.satkerId))).map(satkerById).filter(s => s.id).sort((a, b) => a.nama.localeCompare(b.nama));
   el.innerHTML = `
-  <div class="topbar"><div><h1>Transaksi</h1><div class="mute">${list.length} transaksi · total Rp ${rp(sum.total)} · PPh Rp ${rp(sum.pph)}</div></div>
+  <div class="topbar"><div><h1>Transaksi</h1><div class="mute">${list.length} transaksi · total ${rp(sum.total)} · PPh ${rp(sum.pph)}</div></div>
     <div class="row"><button id="bPdf">Impor PDF INAPROC / Mbizmarket</button><button id="bDigi">Tempel dari Digipay</button><button class="pri" onclick="location.hash='#/trx/baru'">+ Transaksi baru</button></div></div>
   <div class="card"><div class="filters">
     <label class="f"><span>Tahun</span><select id="f_tahun"><option value="">Semua</option>${tahunList().map(y => `<option ${y === F.tahun ? "selected" : ""}>${y}</option>`).join("")}</select></label>
@@ -558,12 +685,15 @@ function pgTransaksi(el) {
     ${cvPilih('id="f_cv"', F.cv, "Semua", "CV")}
     ${kanalPilih('id="f_kanal"', F.kanal, "Semua", "Kanal")}
     <label class="f"><span>Status</span><select id="f_status">${optList(STATUS, F.status, "Semua")}</select></label>
+    <label class="f"><span>Pengiriman</span><select id="f_kirim">${optList(KIRIM_LBL, F.kirim, "Semua")}</select></label>
     <label class="f"><span>Satker</span><select id="f_satker" style="max-width:220px">${optList(Object.fromEntries(satkerUsed.map(s => [String(s.id), s.singkat || s.nama])), F.satker, "Semua")}</select></label>
     <label class="f" style="flex:1;min-width:200px"><span>Cari (no. invoice, barang, PPK, SJ…)</span><input id="f_q" value="${esc(F.q || "")}" placeholder="ketik lalu Enter"></label>
     <button id="fReset" class="ghost">Reset</button><button id="xList">Unduh Excel</button>
-  </div>${F.tanpaTgl ? `<div class="alert warn" style="margin:10px 0 0">Menampilkan transaksi tanpa tanggal. Buka satu per satu, isi tanggal, lalu simpan.</div>` : ""}</div>
-  <div class="card tight">${tabelTrx(list)}</div>`;
-  ["tahun", "bulan", "cv", "kanal", "status", "satker"].forEach(k => $("#f_" + k).onchange = e => { F[k] = e.target.value; F.tanpaTgl = 0; render(); });
+  </div>${F.tanpaTgl ? `<div class="alert warn" style="margin:10px 0 0">Menampilkan transaksi tanpa tanggal. Buka satu per satu, isi tanggal, lalu simpan.</div>` : ""}${F.tagih ? `<div class="alert info" style="margin:10px 0 0">Menampilkan transaksi yang <b>perlu ditagih</b> (belum lunas, termasuk hutang dari data Excel lama). <a href="#" id="fTagihOff">tampilkan semua</a></div>` : ""}</div>
+  <div class="card tight"><div class="card-h"><span class="small mute">Klik ▸ untuk melihat rincian barang &amp; pengiriman · klik baris untuk membuka transaksi</span><label class="check" style="margin:0"><input type="checkbox" id="fBuka" ${F.buka ? "checked" : ""}> Tampilkan rincian semua transaksi</label></div>${tabelTrx(list, F.buka)}</div>`;
+  $("#fBuka").onchange = e => { F.buka = e.target.checked ? 1 : 0; render(); };
+  if ($("#fTagihOff")) $("#fTagihOff").onclick = e => { e.preventDefault(); F.tagih = 0; render(); };
+  ["tahun", "bulan", "cv", "kanal", "status", "satker", "kirim"].forEach(k => $("#f_" + k).onchange = e => { F[k] = e.target.value; F.tanpaTgl = 0; render(); });
   $("#f_q").onkeydown = e => { if (e.key === "Enter") { F.q = e.target.value; render(); } };
   $("#fReset").onclick = () => { S.filters.trx = { tahun: tahunList()[0] }; render(); };
   $("#xList").onclick = () => exportDaftar(list, F);
@@ -578,17 +708,20 @@ function trxBaru(base) {
   return Object.assign({ id: 0, cv: "", kanal: k, satkerId: 0, tanggal: today(), noTrx: "", status: "proses", inclPPN: KANAL[k].incl, wapu: true, platformFee: 0, items: [], lampiran: [] }, base || {});
 }
 
-function nomorSJ(t) {
+function nomorSJ(t, dariKirim) {
   const cv = S.data.cv.find(c => c.kode === t.cv);
   const fmt = (cv && cv.formatSJ) || "S{MM}{YY}-20{NN}";
   const d = t.tanggal || today();
   const pre = fmt.replace("{MM}", d.slice(5, 7)).replace("{YY}", d.slice(2, 4)).replace("{YYYY}", d.slice(0, 4));
   const head = pre.split("{NN}")[0];
   let max = 0;
+  const cek = (no, cv) => { if (!no || cv !== t.cv || !no.startsWith(head)) return; const n = parseInt(no.slice(head.length), 10); if (n > max) max = n; };
   S.data.transaksi.forEach(x => {
-    if (x.id === t.id || !x.noSJ || x.cv !== t.cv || !x.noSJ.startsWith(head)) return;
-    const n = parseInt(x.noSJ.slice(head.length), 10); if (n > max) max = n;
+    if (x.id !== t.id) cek(x.noSJ, x.cv);
+    (x.id === t.id ? [] : x.kirim || []).forEach(k => cek(k.noSJ, x.cv));
   });
+  (t.kirim || []).forEach(k => cek(k.noSJ, t.cv)); // nomor yang sudah dipakai di form ini
+  if (dariKirim && t.noSJ) cek(t.noSJ, t.cv);
   return pre.replace("{NN}", String(max + 1).padStart(2, "0"));
 }
 
@@ -600,6 +733,7 @@ function pgForm(el, arg) {
   const info = S.draft && S.draft._info;
   S.draft = null;
   const T = t; T._files = pending;
+  let kirimEd = null; // editor pengiriman (dibuat setelah tabel barang)
   if (T.wapu == null) T.wapu = true;
   S.formDirty = arg === "baru" && (T.items.length > 0);
 
@@ -630,14 +764,15 @@ function pgForm(el, arg) {
   </div>
   <div class="grid g4" id="extra">${extra()}</div>
   <div class="pajakbox"><div class="ttl">Pajak untuk transaksi ini</div>
-    <div class="row" style="gap:6px 22px;align-items:flex-start">
-      <div><label class="check"><input type="checkbox" data-k="noPPN" data-neg="1" ${!T.noPPN ? "checked" : ""}> <b>Kenakan PPN ${S.data.settings.ppn}%</b></label>
-        <div class="sub-opt"><label class="check"><input type="checkbox" data-k="inclPPN" ${T.inclPPN ? "checked" : ""} ${T.noPPN ? "disabled" : ""}> Harga sudah termasuk PPN</label>
+    <div class="pj-grid">
+      <div class="pj-card ${T.noPPN ? "off" : ""}" id="pjPPN"><label class="check pj-main"><input type="checkbox" data-k="noPPN" data-neg="1" ${!T.noPPN ? "checked" : ""}> Kenakan PPN ${fmtN(S.data.settings.ppn)}%</label>
+        <div class="pj-sub"><label class="check"><input type="checkbox" data-k="inclPPN" ${T.inclPPN ? "checked" : ""} ${T.noPPN ? "disabled" : ""}> Harga sudah termasuk PPN</label>
         <label class="check"><input type="checkbox" data-k="wapu" ${T.wapu !== false ? "checked" : ""} ${T.noPPN ? "disabled" : ""}> PPN dipungut instansi (WAPU)</label></div></div>
-      <div><label class="check"><input type="checkbox" data-k="noPPh22" data-neg="1" ${!T.noPPh22 ? "checked" : ""}> <b>Potong PPh 22</b> — barang ${fmtN(S.data.settings.pph22)}%</label>
-        <label class="check"><input type="checkbox" data-k="noPPh23" data-neg="1" ${!T.noPPh23 ? "checked" : ""}> <b>Potong PPh 23</b> — jasa ${fmtN(S.data.settings.pph23)}%</label></div>
-      <div class="small mute" style="max-width:300px">Hilangkan centang bila pajak tersebut tidak berlaku untuk invoice ini (mis. CV non-PKP, instansi tidak memotong PPh, atau pembelian di bawah batas).</div>
-    </div></div>
+      <div class="pj-card ${T.noPPh22 && T.noPPh23 ? "off" : ""}" id="pjPPh"><label class="check pj-main"><input type="checkbox" id="kenaPPh" ${!(T.noPPh22 && T.noPPh23) ? "checked" : ""}> Kenakan PPh</label>
+        <div class="pj-sub"><label class="check"><input type="checkbox" data-k="noPPh22" data-neg="1" ${!T.noPPh22 ? "checked" : ""}> PPh 22 — barang ${fmtN(S.data.settings.pph22)}%</label>
+        <label class="check"><input type="checkbox" data-k="noPPh23" data-neg="1" ${!T.noPPh23 ? "checked" : ""}> PPh 23 — jasa ${fmtN(S.data.settings.pph23)}%</label></div></div>
+    </div>
+    <div class="pj-ket">Harga barang diisi <b>sebelum PPN</b> (exclude). Centang "Harga sudah termasuk PPN" hanya bila harga di dokumen sudah termasuk PPN. Hilangkan centang pajak yang tidak berlaku (mis. CV non-PKP atau instansi tidak memotong PPh).</div></div>
   <label class="f"><span>Catatan</span><textarea data-k="catatan" style="min-height:44px">${esc(T.catatan || "")}</textarea></label>
   </div>
   <div class="card tight"><div class="card-h"><h2 style="margin:0">Barang / jasa <span class="mute small" id="cnt"></span></h2>
@@ -650,6 +785,8 @@ function pgForm(el, arg) {
       <div class="sumbox" id="sum"></div>
     </div>
   </div>
+  <div class="card tight noprint"><div class="card-h"><h2 style="margin:0">Pengiriman <span class="mute small">(invoice awal tidak berubah; catat setiap barang dikirim)</span></h2><span id="krStat"></span></div>
+    <div style="padding:12px 16px" id="kirimBox"></div></div>
   <div class="savebar noprint"><div id="saveInfo"></div><div class="row"><a class="btn" href="#/transaksi">Kembali</a><button class="pri" id="bSave2">Simpan <kbd>Ctrl+S</kbd></button></div></div>`;
 
   // --- binding field header
@@ -659,12 +796,18 @@ function pgForm(el, arg) {
     inp.addEventListener(ev, () => {
       S.formDirty = true;
       T[k] = inp.type === "checkbox" ? (inp.dataset.neg ? !inp.checked : inp.checked) : inp.type === "number" ? Number(inp.value) : inp.value;
-      if (k === "noPPN") { $("[data-k=inclPPN]").disabled = T.noPPN; $("[data-k=wapu]").disabled = T.noPPN; }
+      if (k === "noPPN") { $("[data-k=inclPPN]").disabled = T.noPPN; $("[data-k=wapu]").disabled = T.noPPN; $("#pjPPN").classList.toggle("off", !!T.noPPN); }
+      if (k === "noPPh22" || k === "noPPh23") { const on = !(T.noPPh22 && T.noPPh23); $("#kenaPPh").checked = on; $("#pjPPh").classList.toggle("off", !on); }
       if (k === "kanal") { T.inclPPN = KANAL[T.kanal].incl; $("[data-k=inclPPN]").checked = T.inclPPN; $("#extra").innerHTML = extra(); bindExtra(); $("#lblNo").textContent = KANAL[T.kanal].no; $("[data-k=noTrx]").placeholder = KANAL[T.kanal].ph; }
       if (k === "noTrx" && T.kanal === "DIGIPAY") autoDigi();
       upd();
     });
   });
+  $("#kenaPPh").onchange = e => {
+    S.formDirty = true; const on = e.target.checked;
+    T.noPPh22 = !on; T.noPPh23 = !on; $("[data-k=noPPh22]").checked = on; $("[data-k=noPPh23]").checked = on;
+    $("#pjPPh").classList.toggle("off", !on); upd();
+  };
   function bindExtra() {
     $$("#extra [data-k]").forEach(inp => {
       const k = inp.dataset.k;
@@ -706,7 +849,7 @@ function pgForm(el, arg) {
   function rowHTML(it, i) {
     const b = it.barangId ? S.idx.barang[it.barangId] : null, k = kosong(it);
     let hint = "";
-    if (b) hint = `<div class="hint ok">✓ master: ${esc(b.nama)}${b.kode ? " · " + esc(b.kode) : ""} · Rp ${rp(b.harga)}/${esc(b.satuan)}</div>`;
+    if (b) hint = `<div class="hint ok">✓ master: ${esc(b.nama)}${b.kode ? " · " + esc(b.kode) : ""} · ${rp(hargaPakai(b, T))}/${esc(b.satuan)} ${T.inclPPN && !T.noPPN ? "(termasuk PPN)" : "(exclude)"}</div>`;
     else if (it._saran) hint = `<div class="hint warn">Mirip: ${esc(it._saran.nama)} <a href="#" data-pakai="${i}">pakai</a></div>`;
     else if (it.nama) hint = `<div class="hint warn">belum terhubung ke master barang</div>`;
     return `<tr data-i="${i}" class="${k ? "kosong" : ""}"><td class="c-no">${k ? "+" : i + 1}</td>
@@ -758,13 +901,13 @@ function pgForm(el, arg) {
   function ikatBaris(tr) {
     const i = +tr.dataset.i, it = T.items[i];
     const bm = it.barangId && S.idx.barang[it.barangId];
-    if (bm && it._hMaster == null) { if (bm.harga === Number(it.harga)) it._hMaster = bm.harga; if (bm.satuan === it.satuan) it._sMaster = bm.satuan; }
+    if (bm && it._hMaster == null) { if (hargaPakai(bm, T) === Number(it.harga)) it._hMaster = hargaPakai(bm, T); if (bm.satuan === it.satuan) it._sMaster = bm.satuan; }
     const q = $(".iNama", tr);
     q.dataset.openEmpty = "1";
       combo(q, v => {
         const r = cariBarangX(v), max = 150;
         const items = r.list.slice(0, max).map(b => ({ b, label: b.nama, html: tandai(b.nama, r.toks),
-          sub: `${b.kode ? (r.kode ? "<mark>" + esc(b.kode) + "</mark>" : esc(b.kode)) + " · " : ""}${b.merk ? esc(b.merk) + " · " : ""}<b>Rp ${rp(b.harga)}</b> / ${esc(b.satuan)}${b.jenis === "J" ? ' · <span class="b warn">JASA</span>' : ""}${b._use ? ` · dipakai ${b._use}×` : ""}`, subHtml: true }));
+          sub: `${b.kode ? (r.kode ? "<mark>" + esc(b.kode) + "</mark>" : esc(b.kode)) + " · " : ""}${b.merk ? esc(b.merk) + " · " : ""}<b>${rp(hargaPakai(b, T))}</b> / ${esc(b.satuan)} <span class="mute">${T.inclPPN && !T.noPPN ? "termasuk PPN" : "exclude · instansi " + rp(b.harga)}</span>${b.jenis === "J" ? ' · <span class="b warn">JASA</span>' : ""}${b._use ? ` · dipakai ${b._use}×` : ""}`, subHtml: true }));
         const header = r.kode === "persis" ? `Kode "${esc(r.q)}" — ${r.total} barang (cocok persis)`
           : r.kode === "awal" ? `Kode berawalan "${esc(r.q)}" — ${r.total} barang`
           : r.sering ? (items.length ? "Sering dipakai — atau ketik nama / kode / merk" : "")
@@ -777,8 +920,8 @@ function pgForm(el, arg) {
         it.barangId = b.id; it.nama = katalog ? it.nama : b.nama; it.jenis = b.jenis || "B";
         // harga/satuan ikut barang baru, kecuali sudah diubah manual (beda dari harga master sebelumnya)
         if (!it.satuan || it.satuan === it._sMaster) it.satuan = b.satuan;
-        if (!it.harga || it.harga === it._hMaster) it.harga = b.harga;
-        it._hMaster = b.harga; it._sMaster = b.satuan;
+        if (!it.harga || it.harga === it._hMaster) it.harga = hargaPakai(b, T);
+        it._hMaster = hargaPakai(b, T); it._sMaster = b.satuan;
         if (!it.qty) it.qty = 1;
         delete it._saran; drawItems(); upd();
         fokus(i, 1); // langsung ke Qty
@@ -827,21 +970,25 @@ function pgForm(el, arg) {
       <div class="ln"><span>Jumlah harga (${isiItems().length} baris)</span><span>${rp(h.bruto)}</span></div>
       <div class="ln"><span>DPP</span><span>${rp(h.dpp)}</span></div>
       ${h.pakaiPPN ? `<div class="ln"><span>PPN ${p.ppn}% ${h.incl ? "(sudah di dalam harga)" : ""}</span><span>${rp(h.ppn)}</span></div>` : `<div class="ln"><span>PPN</span><span class="b warn">tidak dikenakan</span></div>`}
-      <div class="ln big"><span>TOTAL TRANSAKSI</span><span>Rp ${rp(h.total)}</span></div>
+      <div class="ln big"><span>TOTAL TRANSAKSI</span><span>${rp(h.total)}</span></div>
       ${h.pph22 ? `<div class="ln minus"><span>PPh 22 barang ${fmtN(p.pph22)}%</span><span>(${rp(h.pph22)})</span></div>` : T.noPPh22 && h.adaB ? `<div class="ln"><span>PPh 22</span><span class="b warn">tidak dipotong</span></div>` : ""}
       ${h.pph23 ? `<div class="ln minus"><span>PPh 23 jasa ${fmtN(p.pph23)}%</span><span>(${rp(h.pph23)})</span></div>` : T.noPPh23 && h.adaJ ? `<div class="ln"><span>PPh 23</span><span class="b warn">tidak dipotong</span></div>` : ""}
       ${h.wapu ? `<div class="ln minus"><span>PPN dipungut instansi</span><span>(${rp(h.ppn)})</span></div>` : ""}
       ${h.fee ? `<div class="ln minus"><span>Platform fee</span><span>(${rp(h.fee)})</span></div>` : ""}
-      <div class="ln net"><span>Diterima bersih</span><span>Rp ${rp(h.bersih)}</span></div>
+      <div class="ln net"><span>Diterima bersih</span><span>${rp(h.bersih)}</span></div>
       ${T._cek ? cekLine(T._cek, h) : ""}`;
-    const sb = $("#saveInfo"); if (sb) sb.innerHTML = `<b>Rp ${rp(h.total)}</b> <span class="mute">· ${isiItems().length} barang · bersih Rp ${rp(h.bersih)}</span>`;
+    if (kirimEd && !(document.activeElement && document.activeElement.closest && document.activeElement.closest("#kirimBox"))) kirimEd.draw();
+    const ks = $("#krStat"); if (ks) ks.innerHTML = kirimBadge(T);
+    const sb = $("#saveInfo"); if (sb) sb.innerHTML = `<b>${rp(h.total)}</b> <span class="mute">· ${isiItems().length} barang · bersih ${rp(h.bersih)}</span>`;
   }
   function addRow() { pastikanKosong(); drawItems(); fokus(T.items.length - 1, 0); }
   $("#bAdd").onclick = addRow;
   $("#bAdd2").onclick = addRow;
   $("#bKeys").onclick = bantuanShortcut;
   $("#bPaste").onclick = () => dlgTempelItem(rows => { T.items = isiItems().concat(rows); S.formDirty = true; drawItems(); upd(); });
-  drawItems(); upd();
+  drawItems();
+  kirimEd = editorKirim($("#kirimBox"), T, soft => { S.formDirty = true; if (!soft) { const ks = $("#krStat"); if (ks) ks.innerHTML = kirimBadge(T); } });
+  upd();
 
   // ---- shortcut keyboard halaman form
   S._keyH = e => {
@@ -881,11 +1028,15 @@ function pgForm(el, arg) {
 
   // --- simpan
   $("#bSave").onclick = async () => {
+    const baru = T.items.filter(it => String(it.nama || "").trim() && !it.barangId);
+    if (baru.length && !T._lewatMaster) { dlgBarangBaru(T, baru, () => { drawItems(); $("#bSave").click(); }); return; }
+    delete T._lewatMaster;
     const btn = $("#bSave"); btn.disabled = true;
     try {
       T.items = T.items.filter(it => String(it.nama || "").trim() || it.barangId || Number(it.harga));
       const body = clone(T); Object.keys(body).forEach(k => { if (k.startsWith("_")) delete body[k]; });
       body.items.forEach(it => { delete it._saran; delete it._hMaster; delete it._sMaster; it.qty = Number(it.qty) || 0; it.harga = Number(it.harga) || 0; });
+      body.kirim = (body.kirim || []).map(k => ({ id: k.id || 0, tgl: k.tgl, noSJ: k.noSJ || "", catatan: k.catatan || "", items: (k.items || []).filter(x => x.qty > 0) }));
       const r = await api("/api/transaksi", body);
       for (const f of T._files) { const fd = new FormData(); fd.append("id", r.id); fd.append("file", f); await api("/api/lampiran", fd); }
       S.formDirty = false;
@@ -902,11 +1053,43 @@ function pgForm(el, arg) {
     await api("/api/transaksi/hapus", { id: T.id }); S.formDirty = false; await loadState(); toast("Transaksi dihapus"); location.hash = "#/transaksi";
   };
   if ($("#bCopy")) $("#bCopy").onclick = () => {
-    const c = clone(T); c.id = 0; c.noTrx = ""; c.noSJ = ""; c.lampiran = []; c.status = "proses"; c.tanggal = today(); delete c.dibuat; delete c.diubah;
+    const c = clone(T); c.id = 0; c.noTrx = ""; c.noSJ = ""; c.lampiran = []; c.kirim = []; c.status = "proses"; c.tanggal = today(); delete c.dibuat; delete c.diubah;
     S.draft = c; S.formDirty = false; location.hash = "#/trx/baru"; render();
   };
   if ($("#bPrint")) $("#bPrint").onclick = () => cetakTrx(T);
   setTimeout(() => { const c = $("[data-k=cv]"); if (!T.cv && (document.activeElement === document.body || !document.activeElement)) { const b = c.closest(".kp") ? c.closest(".kp").querySelector(".kp-b") : c; b.focus(); } }, 50);
+}
+
+// Barang di transaksi yang belum ada di master: tambahkan ke master (nama katalog jadi alias),
+// hubungkan ke barang yang mirip, atau lewati. lanjut() dipanggil untuk meneruskan penyimpanan.
+function dlgBarangBaru(T, baru, lanjut) {
+  const ppn = 1 + (S.data.settings.ppn || 11) / 100, incl = T.inclPPN && !T.noPPN;
+  const rows = baru.map((it, i) => {
+    const m = cocokBarang(it.nama), mirip = m && m.barang, dasar = P.pecahKatalog(it.nama).dasar.toUpperCase();
+    const inst = Math.round(incl ? Number(it.harga) || 0 : (Number(it.harga) || 0) * ppn);
+    return `<tr data-i="${i}"><td><select class="bbAksi"><option value="tambah" ${mirip ? "" : "selected"}>Tambah ke master</option>${mirip ? `<option value="pakai" selected>Hubungkan ke yang mirip</option>` : ""}<option value="lewati">Lewati</option></select></td>
+      <td><input class="bbNama" value="${esc(dasar)}"><div class="small mute">${mirip ? `mirip: <b>${esc(mirip.nama)}</b> (${rp(mirip.harga)}/${esc(mirip.satuan)})` : "nama di dokumen: " + esc(it.nama)}</div></td>
+      <td><input class="bbSat" value="${esc(it.satuan || "")}" style="width:80px"></td>
+      <td class="num"><input class="bbH num" type="number" min="0" value="${inst}" style="width:120px"><div class="small mute">${incl ? "harga dokumen" : "exclude " + rp(it.harga) + " + PPN"}</div></td>
+      <td><select class="bbJ"><option value="B" ${it.jenis !== "J" ? "selected" : ""}>Barang</option><option value="J" ${it.jenis === "J" ? "selected" : ""}>Jasa</option></select></td></tr>`;
+  }).join("");
+  const m = modal(`${baru.length} barang belum ada di master`, `<p class="small mute" style="margin-top:0">Supaya transaksi berikutnya langsung cocok, tambahkan barang ini ke Master Barang. Nama di dokumen (mis. "… - OSI 604") otomatis disimpan sebagai alias. Harga master = harga instansi (termasuk PPN).</p>
+    <div class="tw"><table class="bb"><thead><tr><th>Tindakan</th><th>Nama di master</th><th>Satuan</th><th class="num">Harga instansi</th><th>Jenis</th></tr></thead><tbody>${rows}</tbody></table></div>`,
+    { wide: true, buttons: [{ label: "Batal" }, { label: "Lewati, simpan saja", onClick: () => { T._lewatMaster = true; lanjut(); } }, { label: "Proses & simpan", cls: "pri", onClick: async btn => {
+      btn.disabled = true;
+      try {
+        for (const tr of $$("tr[data-i]", m.el)) {
+          const it = baru[+tr.dataset.i], aksi = $(".bbAksi", tr).value;
+          if (aksi === "lewati") continue;
+          if (aksi === "pakai") { const mb = cocokBarang(it.nama).barang; it.barangId = mb.id; if (!it.satuan) it.satuan = mb.satuan; continue; }
+          const nama = $(".bbNama", tr).value.trim(); if (!nama) continue;
+          const b = { id: 0, kode: "", nama, merk: "", satuan: $(".bbSat", tr).value.trim().toUpperCase(), harga: Number($(".bbH", tr).value) || 0, jenis: $(".bbJ", tr).value, alias: P.norm(nama) === P.norm(it.nama) ? [] : [it.nama] };
+          const r = await api("/api/barang", b);
+          b.id = r.id; S.data.barang.push(b); it.barangId = r.id; it.jenis = b.jenis; if (!it.satuan) it.satuan = b.satuan;
+        }
+        buildIndex(); T._lewatMaster = true; lanjut();
+      } catch (e) { toast(e.message, true); btn.disabled = false; return false; }
+    } }] });
 }
 
 function bantuanShortcut() {
@@ -973,7 +1156,7 @@ function bukaDraft(r, files) {
   t._files = files || [];
   const sum = r.items.reduce((a, i) => a + i.qty * i.harga, 0);
   const dup = r.noTrx && S.data.transaksi.find(x => x.kanal === r.kanal && x.noTrx === r.noTrx);
-  const msg = [`Terbaca dari ${KANAL[r.kanal].label}: <b>${r.items.length} barang</b>, jumlah Rp ${rp(sum)}. ${pasti} barang langsung cocok dengan master, ${r.items.length - pasti} perlu dicek.`];
+  const msg = [`Terbaca dari ${KANAL[r.kanal].label}: <b>${r.items.length} barang</b>, jumlah ${rp(sum)}. ${pasti} barang langsung cocok dengan master, ${r.items.length - pasti} perlu dicek.`];
   if (!r.cv) msg.push(r.kanal === "DIGIPAY" ? "Pilih CV yang menerima pesanan ini." : `Penyedia di dokumen: <b>${esc(r.penyedia || "-")}</b> — pilih CV secara manual.`);
   if (!s && r.namaSatker) msg.push(`Satker "<b>${esc(r.namaSatker)}</b>" belum ada di master — tambahkan lewat link di bawah kolom satker.`);
   if (dup) msg.push(`<b>Perhatian:</b> nomor ${esc(r.noTrx)} sudah pernah dicatat (<a href="#/trx/${dup.id}">buka transaksi #${dup.id}</a>).`);
@@ -1027,7 +1210,7 @@ function dlgDigipay() {
     const s = cocokSatker(r.namaSatker, r.kodeSatker, r.noDok);
     const sum = r.items.reduce((a, i) => a + i.qty * i.harga, 0);
     $("#pv", m.el).innerHTML = `No. invoice: <b>${esc(r.noTrx || "–")}</b> · Satker: <b>${esc(s ? s.nama : (r.namaSatker || (r.kodeSatker ? "kode " + r.kodeSatker + " (belum ada di master)" : "–")))}</b> · Kode akun: <b>${esc(r.kodeAkun || "–")}</b> · Tanggal: <b>${esc(tgl(r.tanggal) || "–")}</b><br>
-      Barang terbaca: <b>${r.items.length}</b> · jumlah Rp <b>${rp(sum)}</b>${r.cekTotal ? ` · total di daftar Rp ${rp(r.cekTotal)} <span class="b ${Math.abs(sum - r.cekTotal) <= 1 ? "ok" : "warn"}">${Math.abs(sum - r.cekTotal) <= 1 ? "cocok" : r.items.length ? "beda" : "rincian belum ditempel"}</span>` : ""}`;
+      Barang terbaca: <b>${r.items.length}</b> · jumlah <b>${rp(sum)}</b>${r.cekTotal ? ` · total di daftar ${rp(r.cekTotal)} <span class="b ${Math.abs(sum - r.cekTotal) <= 1 ? "ok" : "warn"}">${Math.abs(sum - r.cekTotal) <= 1 ? "cocok" : r.items.length ? "beda" : "rincian belum ditempel"}</span>` : ""}`;
   };
   $("#tx", m.el).addEventListener("input", prev);
   $("#tx", m.el).addEventListener("paste", e => {
@@ -1052,9 +1235,9 @@ function dlgTempelItem(onOk) {
     if (!rows.length) rows = txt.split(/\r?\n/).map(l => l.split("\t")).filter(c => c.length >= 2 && c[0].trim())
       .map(c => ({ nama: c[0].trim(), qty: P.angka(c[1]), satuan: (c[2] || "").trim().toUpperCase(), harga: P.angka(c[3] || 0), jenis: "B" }))
       .filter(r => r.qty > 0);
-    return rows.map(it => { const mm = cocokBarang(it.nama); const r = { barangId: 0, nama: it.nama, qty: it.qty, satuan: it.satuan || "", harga: it.harga, jenis: it.jenis }; if (mm && mm.pasti) { r.barangId = mm.barang.id; r.satuan = r.satuan || mm.barang.satuan; r.harga = r.harga || mm.barang.harga; r.jenis = mm.barang.jenis || "B"; } else if (mm) r._saran = mm.barang; return r; });
+    return rows.map(it => { const mm = cocokBarang(it.nama); const r = { barangId: 0, nama: it.nama, qty: it.qty, satuan: it.satuan || "", harga: it.harga, jenis: it.jenis }; if (mm && mm.pasti) { r.barangId = mm.barang.id; r.satuan = r.satuan || mm.barang.satuan; r.harga = r.harga || hargaEx(mm.barang); r.jenis = mm.barang.jenis || "B"; } else if (mm) r._saran = mm.barang; return r; });
   };
-  $("#tx", m.el).addEventListener("input", () => { const r = parse(); $("#pv", m.el).textContent = `${r.length} baris terbaca, jumlah Rp ${rp(r.reduce((a, i) => a + i.qty * i.harga, 0))}`; });
+  $("#tx", m.el).addEventListener("input", () => { const r = parse(); $("#pv", m.el).textContent = `${r.length} baris terbaca, jumlah ${rp(r.reduce((a, i) => a + i.qty * i.harga, 0))}`; });
 }
 
 // ================================================================ CETAK
@@ -1100,7 +1283,7 @@ function rkBulanan(el, list, F) {
   el.innerHTML = cvs.map(cv => {
     const rows = BULAN.map((b, i) => { const a = mb(cv, i); return { b, n: a.length, dpp: val(a, "dpp"), ppn: val(a, "ppn"), total: val(a, "total"), pph: val(a, "pph"), bersih: val(a, "bersih") }; }).filter((r, i) => i + 1 >= +F.dari && i + 1 <= +F.sampai);
     const t = k => rows.reduce((a, r) => a + r[k], 0);
-    return `<div class="card tight"><div class="card-h"><h2 style="margin:0"><span class="b ${cv}">${cv}</span> ${esc(cvNama(cv))}</h2><span class="mute">${t("n")} transaksi · Rp ${rp(t("total"))}</span></div><div class="tw"><table class="mx"><thead><tr><th>Bulan</th><th class="num">Trx</th><th class="num">DPP</th><th class="num">PPN</th><th class="num">Total</th><th class="num">PPh</th><th class="num">Bersih diterima</th></tr></thead><tbody>
+    return `<div class="card tight"><div class="card-h"><h2 style="margin:0"><span class="b ${cv}">${cv}</span> ${esc(cvNama(cv))}</h2><span class="mute">${t("n")} transaksi · ${rp(t("total"))}</span></div><div class="tw"><table class="mx"><thead><tr><th>Bulan</th><th class="num">Trx</th><th class="num">DPP</th><th class="num">PPN</th><th class="num">Total</th><th class="num">PPh</th><th class="num">Bersih diterima</th></tr></thead><tbody>
     ${rows.map(r => `<tr><td>${r.b}</td><td class="num ${r.n ? "" : "z"}">${r.n || "–"}</td><td class="num ${r.n ? "" : "z"}">${r.n ? rp(r.dpp) : "–"}</td><td class="num ${r.n ? "" : "z"}">${r.n ? rp(r.ppn) : "–"}</td><td class="num ${r.n ? "" : "z"}"><b>${r.n ? rp(r.total) : "–"}</b></td><td class="num ${r.n ? "" : "z"}">${r.n ? rp(r.pph) : "–"}</td><td class="num ${r.n ? "" : "z"}">${r.n ? rp(r.bersih) : "–"}</td></tr>`).join("")}
     <tr class="tot"><td>Total</td><td class="num">${t("n")}</td><td class="num">${rp(t("dpp"))}</td><td class="num">${rp(t("ppn"))}</td><td class="num">${rp(t("total"))}</td><td class="num">${rp(t("pph"))}</td><td class="num">${rp(t("bersih"))}</td></tr></tbody></table></div></div>`;
   }).join("");
@@ -1138,10 +1321,21 @@ function rkBpn(el, list, F) {
   <tr class="tot"><td>Total</td>${m[cvs[0]].map((_, i) => `<td class="num">${rp(cvs.reduce((a, c) => a + m[c][i], 0))}</td>`).join("")}<td class="num">${rp(cvs.reduce((a, c) => a + m[c].reduce((x, y) => x + y, 0), 0))}</td></tr></tbody></table></div></div>
   <div class="card tight"><div class="tw"><table class="mx"><thead><tr><th>No</th><th>Kode</th><th>Nama kantah</th>${cvs.map(c => `<th class="num">${c}</th>`).join("")}<th class="num">Transaksi</th><th class="num">Total</th></tr></thead><tbody>
   ${kantah.map((k, i) => { const a = bpnList.filter(t => t.satkerId === k.id); const by = {}; a.forEach(t => by[t.cv] = (by[t.cv] || 0) + hitung(t).total); const s = Object.values(by).reduce((x, y) => x + y, 0);
-    return `<tr><td>${i + 1}</td><td class="nowrap">${esc(k.kodeBPN || k.kodeKantah)}</td><td>${esc(k.singkat || k.nama)}</td>${cvs.map(c => `<td class="num ${by[c] ? "" : "z"}">${by[c] ? rp(by[c]) : "–"}</td>`).join("")}<td class="num ${a.length ? "" : "z"}">${a.length || "–"}</td><td class="num"><b>${s ? rp(s) : "–"}</b></td></tr>`; }).join("")}
+    return `<tr class="${a.length ? "click" : ""}" data-kantah="${a.length ? k.id : ""}"><td>${i + 1}</td><td class="nowrap">${esc(k.kodeBPN || k.kodeKantah)}</td><td>${esc(k.singkat || k.nama)}${a.length ? ' <span class="small mute">▸ lihat transaksi</span>' : ""}</td>${cvs.map(c => `<td class="num ${by[c] ? "" : "z"}">${by[c] ? rp(by[c]) : "–"}</td>`).join("")}<td class="num ${a.length ? "" : "z"}">${a.length || "–"}</td><td class="num"><b>${s ? rp(s) : "–"}</b></td></tr>`; }).join("")}
   </tbody></table></div></div>
-  <p class="small mute">Excel mengikuti format BELANJA BPN: sheet BERANDA + satu sheet per kantah berisi tabel bulan per CV dan blok rincian tiap transaksi (rumus Excel tetap hidup).</p>`;
+  <p class="small mute">Klik nama kantah untuk melihat transaksinya beserta rincian barang per nomor transaksi. Excel mengikuti format BELANJA BPN: sheet BERANDA + satu sheet per kantah berisi tabel bulan per CV dan blok rincian tiap transaksi (rumus Excel tetap hidup).</p>`;
+  $$("tr[data-kantah]", el).forEach(tr => { if (tr.dataset.kantah) tr.onclick = () => dlgSatkerTrx(satkerById(+tr.dataset.kantah), bpnList.filter(t => t.satkerId === +tr.dataset.kantah), F); });
   $("#rX").onclick = () => exportPerSatker(bpnList, F, true);
+}
+
+// daftar transaksi satu satker/kantah, tiap nomor transaksi bisa dibuka rincian barangnya
+function dlgSatkerTrx(s, arr, F) {
+  arr = arr.slice().sort((a, b) => a.tanggal.localeCompare(b.tanggal) || a.id - b.id);
+  const tot = arr.reduce((a, t) => a + hitung(t).total, 0);
+  const m = modal(s.nama, `<div class="small mute" style="margin-bottom:8px">${[s.kodeBPN && "Kode satker " + esc(s.kodeBPN), s.kodeSatker && "Digipay " + esc(s.kodeSatker), `${BULAN[+F.dari - 1]} – ${BULAN[+F.sampai - 1]} ${F.tahun}`, arr.length + " transaksi", `<b>${rp(tot)}</b>`].filter(Boolean).join(" · ")}</div>
+    <div class="row" style="justify-content:flex-end;margin-bottom:6px"><button class="sm" id="dsBuka">Buka semua rincian</button></div><div id="dsT">${tabelTrx(arr)}</div>`, { wide: true, buttons: [{ label: "Tutup", cls: "pri" }], noFocus: true });
+  bindTrxRows($("#dsT", m.el));
+  $("#dsBuka", m.el).onclick = () => { $("#dsT", m.el).innerHTML = tabelTrx(arr, true); bindTrxRows($("#dsT", m.el)); };
 }
 
 function rkPajak(el, list, F) {
@@ -1168,33 +1362,63 @@ function exportBulanan(tahun, kanal, F) {
   cvs.forEach((cv, i) => {
     const r = 5 + i;
     const vals = BULAN.map((_, b) => list.filter(t => t.cv === cv && +t.tanggal.slice(5, 7) === b + 1).reduce((a, t) => a + hitung(t).total, 0));
-    rows.push([C(cvNama(cv), "txt")].concat(vals.map(v => C(v, "num"))).concat([C(vals.reduce((a, b) => a + b, 0), "tot", `SUM(B${r}:M${r})`)]));
+    rows.push([C(cvNama(cv), "txt")].concat(vals.map(v => C(v, "rp"))).concat([C(vals.reduce((a, b) => a + b, 0), "rpt", `SUM(B${r}:M${r})`)]));
   });
   const last = 4 + cvs.length;
-  rows.push([C("TOTAL", "totl")].concat(Array.from({ length: 13 }, (_, i) => { const col = String.fromCharCode(66 + i); return C(0, "tot", `SUM(${col}5:${col}${last})`); })));
+  rows.push([C("TOTAL", "totl")].concat(Array.from({ length: 13 }, (_, i) => { const col = String.fromCharCode(66 + i); return C(0, "rpt", `SUM(${col}5:${col}${last})`); })));
   // detail per bulan per CV dengan DPP/PPN/PPh
   const det = [[C(`RINCIAN BULANAN ${tahun}`, "title")], [], ["CV", "BULAN", "TRANSAKSI", "DPP", "PPN", "TOTAL", "PPh 22", "PPh 23", "PLATFORM FEE", "BERSIH DITERIMA"].map(h => C(h, "hdr"))];
   cvs.forEach(cv => BULAN.forEach((b, i) => {
     const a = list.filter(t => t.cv === cv && +t.tanggal.slice(5, 7) === i + 1); if (!a.length) return;
     const s = k => a.reduce((x, t) => x + hitung(t)[k], 0);
-    det.push([C(cv, "txt"), C(b, "txt"), C(a.length, "num"), C(s("dpp"), "num"), C(s("ppn"), "num"), C(s("total"), "num"), C(s("pph22"), "num"), C(s("pph23"), "num"), C(s("fee"), "num"), C(s("bersih"), "num")]);
+    det.push([C(cv, "txt"), C(b, "txt"), C(a.length, "num"), C(s("dpp"), "rp"), C(s("ppn"), "rp"), C(s("total"), "rp"), C(s("pph22"), "rp"), C(s("pph23"), "rp"), C(s("fee"), "rp"), C(s("bersih"), "rp")]);
   }));
   exportBook({ filename: `Rekap Bulanan ${tahun}${kanal ? " " + KANAL[kanal].label : ""}.xlsx`, sheets: [
-    { name: "BERANDA", cols: [34].concat(Array(12).fill(14)).concat([16]), rows, freeze: 4 },
-    { name: "RINCIAN", cols: [8, 13, 11, 16, 15, 16, 14, 14, 14, 17], rows: det, freeze: 3 }] });
+    { name: "BERANDA", cols: [34].concat(Array(12).fill(18)).concat([21]), rows, freeze: 4 },
+    { name: "RINCIAN", cols: [8, 13, 11, 20, 19, 20, 18, 18, 18, 21], rows: det, freeze: 3 }] });
 }
 
 function exportDaftar(list, F) {
   const hdr = ["NO", "TANGGAL", "CV", "KANAL", "KODE SATKER", "SATKER", "NO. TRANSAKSI", "NO. SURAT JALAN", "KODE AKUN", "PPK", "STATUS", "DPP", "PPN", "TOTAL", "PPh 22", "PPh 23", "PLATFORM FEE", "BERSIH", "JML BARANG", "CATATAN", "PAJAK"];
   const rows = [[C("DAFTAR TRANSAKSI", "title")], [C(`${list.length} transaksi · dibuat ${new Date().toLocaleString("id-ID")}`, "sub")], hdr.map(h => C(h, "hdr"))];
-  list.forEach((t, i) => { const h = hitung(t), s = satkerById(t.satkerId); rows.push([C(i + 1, "date"), C(tgl(t.tanggal), "date"), C(t.cv, "date"), C(KANAL[t.kanal].label, "txt"), C(s.kodeBPN || s.kodeSatker || "", "txt"), C(s.nama, "txt"), C(t.noTrx || "", "txt"), C(t.noSJ || "", "txt"), C(t.kodeAkun || "", "txt"), C(t.ppk || "", "txt"), C(STATUS[t.status], "txt"), C(h.dpp, "num"), C(h.ppn, "num"), C(h.total, "num"), C(h.pph22, "num"), C(h.pph23, "num"), C(h.fee, "num"), C(h.bersih, "num"), C(t.items.length, "num"), C(t.catatan || "", "txt"), C([t.noPPN ? "tanpa PPN" : "", t.noPPh22 ? "tanpa PPh 22" : "", t.noPPh23 ? "tanpa PPh 23" : ""].filter(Boolean).join(", ") || "normal", "txt")]); });
+  list.forEach((t, i) => { const h = hitung(t), s = satkerById(t.satkerId); rows.push([C(i + 1, "date"), C(tgl(t.tanggal), "date"), C(t.cv, "date"), C(KANAL[t.kanal].label, "txt"), C(s.kodeBPN || s.kodeSatker || "", "txt"), C(s.nama, "txt"), C(t.noTrx || "", "txt"), C(t.noSJ || "", "txt"), C(t.kodeAkun || "", "txt"), C(t.ppk || "", "txt"), C(STATUS[t.status], "txt"), C(h.dpp, "rp"), C(h.ppn, "rp"), C(h.total, "rp"), C(h.pph22, "rp"), C(h.pph23, "rp"), C(h.fee, "rp"), C(h.bersih, "rp"), C(t.items.length, "num"), C(t.catatan || "", "txt"), C([t.noPPN ? "tanpa PPN" : "", t.noPPh22 ? "tanpa PPh 22" : "", t.noPPh23 ? "tanpa PPh 23" : ""].filter(Boolean).join(", ") || "normal", "txt")]); });
   const n = rows.length;
-  rows.push([null, null, null, null, null, C("TOTAL", "totl"), null, null, null, null, null].concat(["L", "M", "N", "O", "P", "Q", "R"].map(c => C(0, "tot", `SUM(${c}4:${c}${n})`))));
-  const items = [["TANGGAL", "CV", "KANAL", "SATKER", "NO. TRANSAKSI", "NAMA BARANG", "KODE MASTER", "QTY", "SATUAN", "HARGA", "JUMLAH", "JENIS"].map(h => C(h, "hdr"))];
-  list.forEach(t => { const s = satkerById(t.satkerId); t.items.forEach(it => { const b = it.barangId ? S.idx.barang[it.barangId] : null; items.push([C(tgl(t.tanggal), "date"), C(t.cv, "date"), C(KANAL[t.kanal].label, "txt"), C(s.singkat || s.nama, "txt"), C(t.noTrx || "", "txt"), C(it.nama, "txt"), C(b ? b.kode : "", "txt"), C(it.qty, "num"), C(it.satuan, "txt"), C(it.harga, "num"), C(it.qty * it.harga, "num"), C(it.jenis === "J" ? "Jasa" : "Barang", "txt")]); }); });
+  rows.push([null, null, null, null, null, C("TOTAL", "totl"), null, null, null, null, null].concat(["L", "M", "N", "O", "P", "Q", "R"].map(c => C(0, "rpt", `SUM(${c}4:${c}${n})`))));
   exportBook({ filename: "Daftar Transaksi.xlsx", sheets: [
-    { name: "TRANSAKSI", cols: [5, 11, 6, 12, 10, 38, 28, 14, 22, 22, 13, 15, 13, 15, 12, 12, 12, 15, 8, 30, 24], rows, freeze: 3 },
-    { name: "RINCIAN BARANG", cols: [11, 6, 12, 22, 28, 46, 12, 8, 9, 13, 15, 8], rows: items, freeze: 1 }] });
+    { name: "TRANSAKSI", cols: [5, 11, 6, 12, 10, 38, 28, 14, 22, 22, 13, 19, 18, 19, 17, 17, 17, 19, 8, 30, 24], rows, freeze: 3 }].concat(sheetRincianCvKanal(list)) });
+}
+
+// Rincian barang: satu sheet per CV per kanal (mis. "OSI - DIGIPAY"). Tiap transaksi punya judul tabel
+// berisi identitasnya (no. transaksi, satker, kanal, CV, tanggal), lalu daftar barang dan jumlahnya.
+function sheetRincianCvKanal(list) {
+  const grup = new Map();
+  list.slice().sort((a, b) => (a.tanggal || "").localeCompare(b.tanggal || "") || a.id - b.id).forEach(t => {
+    const key = t.cv + " - " + (KANAL[t.kanal] ? KANAL[t.kanal].label.toUpperCase() : t.kanal);
+    if (!grup.has(key)) grup.set(key, []); grup.get(key).push(t);
+  });
+  const urutKanal = Object.keys(KANAL).map(k => KANAL[k].label.toUpperCase());
+  return Array.from(grup.entries()).sort((a, b) => a[0].split(" - ")[0].localeCompare(b[0].split(" - ")[0]) || urutKanal.indexOf(a[0].split(" - ")[1]) - urutKanal.indexOf(b[0].split(" - ")[1])).map(([key, arr]) => {
+    const rows = [[C("RINCIAN BARANG — " + cvNama(arr[0].cv) + " — " + KANAL[arr[0].kanal].label, "title")], [C(`${arr.length} transaksi · dibuat ${new Date().toLocaleString("id-ID")}`, "sub")], []];
+    const subtot = [];
+    arr.forEach(t => {
+      const s = satkerById(t.satkerId), h = hitung(t);
+      rows.push([C(`${KANAL[t.kanal].no}: ${t.noTrx || "–"}`, "blok"), C("", "blok"), C("", "blok"), C("", "blok"), C("", "blok"), C("", "blok")]);
+      rows.push([C("Satker: " + s.nama, "bold"), null, null, C("Tanggal: " + (tgl(t.tanggal) || "–"), "bold")]);
+      rows.push([C("Kanal: " + KANAL[t.kanal].label + " · CV: " + cvNama(t.cv) + (t.noSJ ? " · SJ " + t.noSJ : "") + " · " + (STATUS[t.status] || t.status), "sub")]);
+      rows.push(["NO", "NAMA BARANG", "QTY", "SATUAN", "HARGA", "JUMLAH"].map(x => C(x, "hdr")));
+      const r1 = rows.length + 1;
+      t.items.forEach((it, i) => { const r = rows.length + 1; rows.push([C(i + 1, "date"), C(it.nama + (it.jenis === "J" ? " (JASA)" : ""), "txt"), C(it.qty, "num"), C(it.satuan || "", "date"), C(it.harga, "rp"), C((Number(it.qty) || 0) * (Number(it.harga) || 0), "rp", `C${r}*E${r}`)]); });
+      const r2 = rows.length, rs = rows.length + 1;
+      rows.push([null, null, null, null, C("JUMLAH", "totl"), C(h.bruto, "rpt", `SUM(F${r1}:F${r2})`)]);
+      if (h.pakaiPPN && !h.incl) rows.push([null, null, null, null, C(`PPN ${S.data.settings.ppn}%`, "txt"), C(h.ppn, "rp")]);
+      else if (h.pakaiPPN) rows.push([null, null, null, null, C("PPN (di dalam harga)", "txt"), C(h.ppn, "rp")]);
+      rows.push([null, null, null, null, C("TOTAL", "totl"), C(h.total, "rpt")]);
+      subtot.push(`F${rows.length}`);
+      rows.push([]);
+    });
+    rows.push([null, null, null, null, C("TOTAL SEMUA", "totl"), C(arr.reduce((a, t) => a + hitung(t).total, 0), "rpt", subtot.join("+"))]);
+    return { name: key.replace(/[\\/?*[\]:]/g, " ").slice(0, 31), cols: [8, 56, 9, 10, 18, 20], rows };
+  });
 }
 
 // Blok rincian satu transaksi pada kolom B..G (format Excel lama). Mengembalikan alamat sel total.
@@ -1206,29 +1430,29 @@ function blokTrx(rows, t) {
     .filter((x, i) => i < 4 || x[1]);
   rows.push([null, C("NO", "hdr"), C("NAMA BARANG", "hdr"), C("QTY", "hdr"), C("SATUAN", "hdr"), C("HARGA", "hdr"), C("TOTAL", "hdr")]);
   const first = rows.length + 1;
-  t.items.forEach((it, i) => { const r = rows.length + 1; rows.push([null, C(i + 1, "date"), C(it.nama + (it.jenis === "J" ? " (JASA)" : ""), "txt"), C(it.qty, "num"), C(it.satuan, "date"), C(it.harga, Number.isInteger(it.harga) ? "num" : "dec"), C(it.qty * it.harga, "num", `D${r}*F${r}`)]); });
+  t.items.forEach((it, i) => { const r = rows.length + 1; rows.push([null, C(i + 1, "date"), C(it.nama + (it.jenis === "J" ? " (JASA)" : ""), "txt"), C(it.qty, "num"), C(it.satuan, "date"), C(it.harga, "rp"), C(it.qty * it.harga, "rp", `D${r}*F${r}`)]); });
   const last = rows.length;
   const rT = rows.length + 1;
-  rows.push([null, null, null, null, null, C(h.incl ? "TOTAL (termasuk PPN)" : "TOTAL / DPP", "totl"), C(h.bruto, "tot", `SUM(G${first}:G${last})`)]);
+  rows.push([null, null, null, null, null, C(h.incl ? "TOTAL (termasuk PPN)" : "TOTAL / DPP", "totl"), C(h.bruto, "rpt", `SUM(G${first}:G${last})`)]);
   let rG;
   if (!h.pakaiPPN) {
     rows.push([null, null, null, null, null, C("PPN", "txt"), C("TIDAK DIKENAKAN", "txt")]);
     rG = rT; rows[rT - 1][5] = C("GRAND TOTAL (tanpa PPN)", "totl");
   } else if (h.incl) {
-    rows.push([null, null, null, null, null, C("DPP", "txt"), C(h.dpp, "num", `ROUND(G${rT}/${1 + ppnP / 100},0)`)]);
-    rows.push([null, null, null, null, null, C(`PPN ${ppnP}%`, "txt"), C(h.ppn, "num", `G${rT}-G${rT + 1}`)]);
+    rows.push([null, null, null, null, null, C("DPP", "txt"), C(h.dpp, "rp", `ROUND(G${rT}/${1 + ppnP / 100},0)`)]);
+    rows.push([null, null, null, null, null, C(`PPN ${ppnP}%`, "txt"), C(h.ppn, "rp", `G${rT}-G${rT + 1}`)]);
     rG = rT; rows[rT - 1][5] = C("GRAND TOTAL", "totl");
   } else {
-    rows.push([null, null, null, null, null, C(`PPN ${ppnP}%`, "txt"), C(h.ppn, "num", `ROUND(G${rT}*${ppnP}%,0)`)]);
+    rows.push([null, null, null, null, null, C(`PPN ${ppnP}%`, "txt"), C(h.ppn, "rp", `ROUND(G${rT}*${ppnP}%,0)`)]);
     rG = rows.length + 1;
-    rows.push([null, null, null, null, null, C("GRAND TOTAL", "totl"), C(h.total, "tot", `G${rT}+G${rT + 1}`)]);
+    rows.push([null, null, null, null, null, C("GRAND TOTAL", "totl"), C(h.total, "rpt", `G${rT}+G${rT + 1}`)]);
   }
-  if (h.pph22) rows.push([null, null, null, null, null, C(`PPh 22 ${fmtN(S.data.settings.pph22)}%`, "txt"), C(h.pph22, "num")]);
+  if (h.pph22) rows.push([null, null, null, null, null, C(`PPh 22 ${fmtN(S.data.settings.pph22)}%`, "txt"), C(h.pph22, "rp")]);
   else if (t.noPPh22 && h.adaB) rows.push([null, null, null, null, null, C("PPh 22", "txt"), C("TIDAK DIPOTONG", "txt")]);
-  if (h.pph23) rows.push([null, null, null, null, null, C(`PPh 23 ${fmtN(S.data.settings.pph23)}%`, "txt"), C(h.pph23, "num")]);
+  if (h.pph23) rows.push([null, null, null, null, null, C(`PPh 23 ${fmtN(S.data.settings.pph23)}%`, "txt"), C(h.pph23, "rp")]);
   else if (t.noPPh23 && h.adaJ) rows.push([null, null, null, null, null, C("PPh 23", "txt"), C("TIDAK DIPOTONG", "txt")]);
-  if (h.fee) rows.push([null, null, null, null, null, C("PLATFORM FEE", "txt"), C(h.fee, "num")]);
-  rows.push([null, null, null, null, null, C("DITERIMA BERSIH", "txt"), C(h.bersih, "num")]);
+  if (h.fee) rows.push([null, null, null, null, null, C("PLATFORM FEE", "txt"), C(h.fee, "rp")]);
+  rows.push([null, null, null, null, null, C("DITERIMA BERSIH", "txt"), C(h.bersih, "rp")]);
   // tempel Form Isian Data di kolom I/J mulai baris header
   form.forEach((f, i) => { const row = rows[r0 + i]; if (!row) return; while (row.length < 10) row.push(null); row[8] = C(f[0], "txt"); row[9] = C(f[1] || "", "txt"); });
   rows.push([]); rows.push([]);
@@ -1251,12 +1475,12 @@ function exportPerSatker(list, F, formatBpn) {
       rows.push([C("NAMA KANTAH :", "bold"), null, C(g.s.singkat || g.s.nama, "bold"), null, null, null, null, null, C("CV", "hdr"), C("BULAN", "hdr")]);
       rows.push([C("TOTAL TRANSAKSI :", "bold"), null, C(g.arr.length, "bold"), null, null, null, null, C("TOTAL", "hdr"), C("CV", "hdr")].concat(BULAN.map(b => C(b, "hdr"))));
       rows.push([C("GRAND TOTAL :", "bold"), null, null]);
-      cvs.forEach((cv, i) => { const r = 4 + i; rows[r - 1] = rows[r - 1] || []; const row = rows[r - 1]; while (row.length < 21) row.push(null); row[7] = C(0, "tot", `SUM(J${r}:U${r})`); row[8] = C(cv, "txt"); });
-      rows[3][2] = C(0, "tot", `SUM(H4:H${3 + cvs.length})`);
+      cvs.forEach((cv, i) => { const r = 4 + i; rows[r - 1] = rows[r - 1] || []; const row = rows[r - 1]; while (row.length < 21) row.push(null); row[7] = C(0, "rpt", `SUM(J${r}:U${r})`); row[8] = C(cv, "txt"); });
+      rows[3][2] = C(0, "rpt", `SUM(H4:H${3 + cvs.length})`);
       while (rows.length < 9) rows.push([]);
     } else {
       rows.push([null, C(g.s.nama, "title"), null, null, null, C("TOTAL TRANSAKSI", "bold"), C(g.arr.length, "bold")]);
-      rows.push([null, C([g.s.kodeBPN && "Kode satker " + g.s.kodeBPN, g.s.kodeSatker && "Digipay " + g.s.kodeSatker].filter(Boolean).join(" · "), "sub"), null, null, null, C("TOTAL INVOICE", "bold"), C(0, "tot")]);
+      rows.push([null, C([g.s.kodeBPN && "Kode satker " + g.s.kodeBPN, g.s.kodeSatker && "Digipay " + g.s.kodeSatker].filter(Boolean).join(" · "), "sub"), null, null, null, C("TOTAL INVOICE", "bold"), C(0, "rpt")]);
       rows.push([]); rows.push([]);
     }
     const refs = [];
@@ -1266,13 +1490,13 @@ function exportPerSatker(list, F, formatBpn) {
         const row = rows[3 + i];
         for (let b = 1; b <= 12; b++) {
           const rr = refs.filter(x => x.cv === cv && x.bulan === b);
-          if (rr.length) row[8 + b] = C(rr.reduce((a, x) => a + x.nilai, 0), "num", rr.map(x => x.total).join("+"));
+          if (rr.length) row[8 + b] = C(rr.reduce((a, x) => a + x.nilai, 0), "rp", rr.map(x => x.total).join("+"));
         }
       });
     } else {
-      rows[1][6] = C(refs.reduce((a, x) => a + x.nilai, 0), "tot", refs.map(x => x.total).join("+"));
+      rows[1][6] = C(refs.reduce((a, x) => a + x.nilai, 0), "rpt", refs.map(x => x.total).join("+"));
     }
-    sheets.push({ name: sn, cols: [16, 6, 52, 9, 10, 18, 17, 17, 22, 30].concat(Array(12).fill(15)), rows });
+    sheets.push({ name: sn, cols: [16, 6, 52, 9, 10, 19, 20, 20, 22, 30].concat(Array(12).fill(18)), rows });
     ringkas.push({ g, sn, nilai: refs.reduce((a, x) => a + x.nilai, 0), byCv: cvs.map(cv => refs.filter(x => x.cv === cv).reduce((a, x) => a + x.nilai, 0)) });
   }
   const judul = formatBpn ? `PENJUALAN BADAN PERTANAHAN NASIONAL PROVINSI JAWA BARAT ${F.tahun}` : `REKAP PER SATKER ${F.tahun}${F.cv ? " — " + cvNama(F.cv) : ""}${F.kanal ? " — " + KANAL[F.kanal].label : ""}`;
@@ -1281,7 +1505,7 @@ function exportPerSatker(list, F, formatBpn) {
     home.push([C("PT/CV", "hdr")].concat(BULAN.map(b => C(b, "hdr"))).concat([C("TOTAL", "hdr")]));
     cvs.forEach((cv, i) => {
       const r = home.length + 1;
-      home.push([C(cvNama(cv), "txt")].concat(BULAN.map((_, b) => { const col = String.fromCharCode(74 + b); const f = ringkas.map(x => `'${x.sn}'!${col}${4 + i}`).join("+"); const v = list.filter(t => t.cv === cv && +t.tanggal.slice(5, 7) === b + 1).reduce((a, t) => a + hitung(t).total, 0); return C(v, "num", f || null); })).concat([C(0, "tot", `SUM(B${r}:M${r})`)]));
+      home.push([C(cvNama(cv), "txt")].concat(BULAN.map((_, b) => { const col = String.fromCharCode(74 + b); const f = ringkas.map(x => `'${x.sn}'!${col}${4 + i}`).join("+"); const v = list.filter(t => t.cv === cv && +t.tanggal.slice(5, 7) === b + 1).reduce((a, t) => a + hitung(t).total, 0); return C(v, "rp", f || null); })).concat([C(0, "rpt", `SUM(B${r}:M${r})`)]));
     });
     home.push([]);
   }
@@ -1289,11 +1513,11 @@ function exportPerSatker(list, F, formatBpn) {
   home.push([C("NO", "hdr"), C(formatBpn ? "KODE" : "KODE SATKER", "hdr"), C(formatBpn ? "NAMA KANTAH" : "NAMA SATKER", "hdr"), C("TRANSAKSI", "hdr")].concat(cvs.map(c => C(c, "hdr"))).concat([C("TOTAL", "hdr")]));
   ringkas.forEach((x, i) => {
     home.push([C(i + 1, "date"), C(x.g.s.kodeBPN || (formatBpn ? x.g.s.kodeKantah : x.g.s.kodeSatker) || "", "txt"), C(formatBpn ? (x.g.s.singkat || x.g.s.nama) : x.g.s.nama, "txt"), C(x.g.arr.length, "num", formatBpn ? `'${x.sn}'!C3` : `'${x.sn}'!G1`)]
-      .concat(x.byCv.map(v => C(v, "num"))).concat([C(x.nilai, "num", formatBpn ? `'${x.sn}'!C4` : `'${x.sn}'!G2`)]));
+      .concat(x.byCv.map(v => C(v, "rp"))).concat([C(x.nilai, "rp", formatBpn ? `'${x.sn}'!C4` : `'${x.sn}'!G2`)]));
   });
   const hn = home.length;
-  home.push([null, null, C("GRAND TOTAL", "totl"), C(0, "tot", `SUM(D${h0 + 1}:D${hn})`)].concat(cvs.map((_, i) => { const col = String.fromCharCode(69 + i); return C(0, "tot", `SUM(${col}${h0 + 1}:${col}${hn})`); })).concat([C(0, "tot", `SUM(${String.fromCharCode(69 + cvs.length)}${h0 + 1}:${String.fromCharCode(69 + cvs.length)}${hn})`)]));
-  sheets.unshift({ name: formatBpn ? "BERANDA" : "HOME", cols: formatBpn ? [34, 14, 38, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 16] : [6, 14, 46, 12, 16, 16, 16, 18], rows: home });
+  home.push([null, null, C("GRAND TOTAL", "totl"), C(0, "tot", `SUM(D${h0 + 1}:D${hn})`)].concat(cvs.map((_, i) => { const col = String.fromCharCode(69 + i); return C(0, "rpt", `SUM(${col}${h0 + 1}:${col}${hn})`); })).concat([C(0, "rpt", `SUM(${String.fromCharCode(69 + cvs.length)}${h0 + 1}:${String.fromCharCode(69 + cvs.length)}${hn})`)]));
+  sheets.unshift({ name: formatBpn ? "BERANDA" : "HOME", cols: formatBpn ? [34, 18, 38, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 21] : [6, 14, 46, 12, 20, 20, 20, 22], rows: home });
   const fn = formatBpn ? `BELANJA BPN ${F.tahun}.xlsx` : `REKAP PER SATKER ${F.tahun}${F.cv ? " " + F.cv : ""}${F.kanal ? " " + KANAL[F.kanal].label : ""}.xlsx`;
   exportBook({ filename: fn, sheets });
 }
@@ -1306,13 +1530,13 @@ function exportPajak(list, F) {
     if (i + 1 < +F.dari || i + 1 > +F.sampai) return;
     const a = list.filter(t => t.cv === cv && +t.tanggal.slice(5, 7) === i + 1); if (!a.length) return;
     let r = { dpp: 0, ppn: 0, w: 0, p22: 0, p23: 0, fee: 0 }; a.forEach(t => { const h = hitung(t); r.dpp += h.dpp; r.ppn += h.ppn; if (h.wapu) r.w += h.ppn; r.p22 += h.pph22; r.p23 += h.pph23; r.fee += h.fee; });
-    rows.push([C(cv, "txt"), C(b, "txt"), C(a.length, "num"), C(r.dpp, "num"), C(r.ppn, "num"), C(r.w, "num"), C(r.p22, "num"), C(r.p23, "num"), C(r.fee, "num")]);
+    rows.push([C(cv, "txt"), C(b, "txt"), C(a.length, "num"), C(r.dpp, "rp"), C(r.ppn, "rp"), C(r.w, "rp"), C(r.p22, "rp"), C(r.p23, "rp"), C(r.fee, "rp")]);
   }));
   const n = rows.length;
-  rows.push([C("TOTAL", "totl"), null].concat(["C", "D", "E", "F", "G", "H", "I"].map(c => C(0, "tot", `SUM(${c}5:${c}${n})`))));
+  rows.push([C("TOTAL", "totl"), null].concat(["C", "D", "E", "F", "G", "H", "I"].map(c => C(0, c === "C" ? "tot" : "rpt", `SUM(${c}5:${c}${n})`))));
   const det = [["TANGGAL", "CV", "KANAL", "SATKER", "NO. TRANSAKSI", "DPP BARANG+JASA", "PPN", "PPh 22", "PPh 23", "WAPU"].map(h => C(h, "hdr"))];
-  list.filter(t => cvs.includes(t.cv)).sort((a, b) => a.tanggal.localeCompare(b.tanggal)).forEach(t => { const h = hitung(t); det.push([C(tgl(t.tanggal), "date"), C(t.cv, "date"), C(KANAL[t.kanal].label, "txt"), C(satkerById(t.satkerId).nama, "txt"), C(t.noTrx || "", "txt"), C(h.dpp, "num"), C(h.ppn, "num"), C(h.pph22, "num"), C(h.pph23, "num"), C(h.wapu ? "Ya" : "Tidak", "date")]); });
-  exportBook({ filename: `Rekap Pajak ${F.tahun}.xlsx`, sheets: [{ name: "PAJAK", cols: [8, 13, 11, 16, 15, 20, 14, 14, 14], rows, freeze: 4 }, { name: "PER TRANSAKSI", cols: [11, 6, 12, 40, 30, 17, 15, 13, 13, 7], rows: det, freeze: 1 }] });
+  list.filter(t => cvs.includes(t.cv)).sort((a, b) => a.tanggal.localeCompare(b.tanggal)).forEach(t => { const h = hitung(t); det.push([C(tgl(t.tanggal), "date"), C(t.cv, "date"), C(KANAL[t.kanal].label, "txt"), C(satkerById(t.satkerId).nama, "txt"), C(t.noTrx || "", "txt"), C(h.dpp, "rp"), C(h.ppn, "rp"), C(h.pph22, "rp"), C(h.pph23, "rp"), C(h.wapu ? "Ya" : "Tidak", "date")]); });
+  exportBook({ filename: `Rekap Pajak ${F.tahun}.xlsx`, sheets: [{ name: "PAJAK", cols: [8, 13, 11, 20, 19, 22, 18, 18, 18], rows, freeze: 4 }, { name: "PER TRANSAKSI", cols: [11, 6, 12, 40, 30, 20, 19, 17, 17, 7], rows: det, freeze: 1 }] });
 }
 
 // ================================================================ MASTER

@@ -34,12 +34,12 @@ type xBook struct {
 
 // urutan gaya = indeks cellXfs di styles.xml
 var xStyles = map[string]int{
-	"": 0, "title": 1, "hdr": 2, "txt": 3, "num": 4, "tot": 5, "totl": 6, "bold": 7, "sub": 8, "dec": 9, "date": 10, "pct": 11,
+	"": 0, "title": 1, "hdr": 2, "txt": 3, "num": 4, "tot": 5, "totl": 6, "bold": 7, "sub": 8, "dec": 9, "date": 10, "pct": 11, "rp": 12, "rpt": 13, "blok": 14,
 }
 
 const stylesXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0"/><numFmt numFmtId="165" formatCode="#,##0.00"/></numFmts>
+<numFmts count="3"><numFmt numFmtId="164" formatCode="#,##0"/><numFmt numFmtId="165" formatCode="#,##0.00"/><numFmt numFmtId="166" formatCode="&quot;Rp &quot;#,##0.00"/></numFmts>
 <fonts count="4">
 <font><sz val="10"/><name val="Arial"/></font>
 <font><b/><sz val="13"/><name val="Arial"/></font>
@@ -57,7 +57,7 @@ const stylesXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <border><left style="thin"><color rgb="FF9AA4B2"/></left><right style="thin"><color rgb="FF9AA4B2"/></right><top style="thin"><color rgb="FF9AA4B2"/></top><bottom style="thin"><color rgb="FF9AA4B2"/></bottom><diagonal/></border>
 </borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="12">
+<cellXfs count="15">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
 <xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
@@ -70,6 +70,9 @@ const stylesXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>
 <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="top"/></xf>
 <xf numFmtId="10" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>
+<xf numFmtId="166" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment vertical="top"/></xf>
+<xf numFmtId="166" fontId="2" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/>
+<xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`
